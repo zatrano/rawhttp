@@ -1,0 +1,24 @@
+# Performance contract (mandatory)
+
+rawhttp must **never** be slower than these rivals on CI/local gates:
+
+- `fasthttp`
+- `net/http`
+- CloudWeGo `Hertz`
+- `gnet` (even minimal HTTP-on-event-loop)
+
+This is a hard product rule, not a soft preference. fasthttp alone is **not** enough.
+rawhttp must be **#1** on every multibench scenario (median snapshot RPS) and win every pairwise median (≥1.00×).
+
+## Gates
+
+1. **ServeConn** (`test/gate_test.go`): fasthttp floors (plaintext ≥3.0×, JSON ≥1.65×, …) + net/http floors.
+2. **TCP multi-rival** (`scripts/multibench -strict`): plaintext, json, headers, chunked — rawhttp #1 vs all four rivals under the same fasthttp load client (median snapshot + pairwise).
+
+## When changing hot path
+
+- After server/client hot-path edits, run:
+  - `cd test && go test -run 'Gate|Allocs' -count=1`
+  - `cd scripts/multibench && go run . -c 64 -d 3s -strict`
+- Do not weaken floors or remove rivals to make CI green. Fix the regression.
+- Benchmark work goes through **multibench** (all rivals), not fasthttp-only comparebench.

@@ -1,3 +1,5 @@
+<div align="center">
+
 # rawhttp
 
 Independent HTTP/1.1 engine for Go. Zero external dependencies.
@@ -24,6 +26,10 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 [![Max connections](https://img.shields.io/badge/Max%20connections-262144-0366d6?style=flat-square)](docs/server.md)
 [![Peak memory](https://img.shields.io/badge/Peak%20memory-0%20alloc%20hello-2ea44f?style=flat-square)](#benchmarks)
 [![Deps](https://img.shields.io/badge/Dependencies-0-lightgrey?style=flat-square)](go.mod)
+
+</div>
+
+---
 
 **Status: v0.1.0 (experimental).** Suitable for controlled deployments and benchmarking. Read [SECURITY.md](SECURITY.md) before public exposure.
 

@@ -11,7 +11,9 @@
 7. Graceful stop: `Shutdown(ctx)`.
 8. Optional: `ListenReusePort`, `Prefork` for multi-core listen scaling.
 9. Observe `OpenConnections` / `TotalRequests`; hook `ConnState` / `ErrorHandler`.
-10. Read [SECURITY.md](../SECURITY.md) — v0.1 is experimental.
+10. Read [SECURITY.md](../SECURITY.md) — v0.2 is experimental.
+11. If you enable `AllowUpgrade`, enforce Origin / auth and either keep the WS loop inside the handler or use an application-level limiter (Hijack releases `Concurrency` / `MaxConnsPerIP` when the handler returns — see [hijacking.md](hijacking.md)).
+12. Downstream integration tests: prefer `-tags rawhttp_poison` so accidental post-handler slice retention fails loudly.
 
 ## Default limits (code)
 

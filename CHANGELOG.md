@@ -17,4 +17,4 @@
 
 ### Documentation
 
-- README / SECURITY / `docs/hijacking.md` / `docs/performance.md` / `docs/production.md` aligned with Upgrade rejection, AllowUpgrade, poison testing, per-connection memory, and hijacked-connection accounting.
+- README / SECURITY / `docs/hijacking.md` / `docs/performance.md` / `docs/production.md` / `docs/server.md` / `docs/api-reference.md` / `docs/getting-started.md` aligned with Upgrade rejection, AllowUpgrade, poison testing, per-connection memory, hijacked-connection accounting, RawHTTP display name, and v0.2.0.

@@ -1,6 +1,6 @@
 # API reference
 
-Public surface of `github.com/zatrano/rawhttp` (v0.1.0). Signatures are summarized; see GoDoc / source for full field lists and edge cases.
+Public surface of `github.com/zatrano/rawhttp` (v0.2.0). Signatures are summarized; see GoDoc / source for full field lists and edge cases.
 
 There is **no** path-parameter router, **no** `DisableHeaderNamesNormalizing`, and **no** WebSocket frame codec in this package. Default parsing **rejects** `Upgrade` / `Connection: upgrade` with 400. Set `Server.AllowUpgrade` to admit a standards-shaped handshake to the handler for `Hijack` (see [Hijacking](hijacking.md)).
 
@@ -39,9 +39,18 @@ log.Fatal(rawhttp.ListenAndServe(":8080", func(ctx *rawhttp.Ctx) {
 
 ## Server
 
-**Type** `Server` — fields in [server.md](server.md).
+**Type** `Server` — fields in [server.md](server.md) (includes `AllowUpgrade`, `KeepHijackedConns`, timeouts, limits).
 
 **Methods:** `ListenAndServe`, `ListenAndServeTLS`, `Serve`, `ServeConn`, `Shutdown`, `Close`.
+
+```go
+s := &rawhttp.Server{
+	Handler:      h,
+	ReadTimeout:  30 * time.Second,
+	AllowUpgrade: false, // default; set true only with Origin/auth + framing
+}
+_ = s.ListenAndServe(":8080")
+```
 
 **Related types:**
 
@@ -51,12 +60,6 @@ log.Fatal(rawhttp.ListenAndServe(":8080", func(ctx *rawhttp.Ctx) {
 | `ConnState` | `StateNew`, `StateActive`, `StateIdle`, `StateClosed` |
 | `FormValueFunc` | `func(ctx *Ctx, key string) []byte` |
 | `PreforkConfig` | Prefork worker settings |
-
-```go
-s := &rawhttp.Server{Handler: h, ReadTimeout: 30 * time.Second}
-_ = s.ListenAndServe(":8080")
-```
-
 ## Ctx
 
 Exported fields: `Method`, `Path`, `Query`, `StatusCode`.

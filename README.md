@@ -17,7 +17,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.1.0)
+[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.2.0)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -31,7 +31,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.1.0 (experimental).** Suitable for controlled deployments and benchmarking. Read [SECURITY.md](SECURITY.md) before public exposure.
+**Status: v0.2.0 (experimental).** Suitable for controlled deployments and benchmarking. Read [SECURITY.md](SECURITY.md) before public exposure.
 
 ```text
 Your app / framework
@@ -46,7 +46,7 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 ## Install
 
 ```bash
-go get github.com/zatrano/rawhttp@v0.1.0
+go get github.com/zatrano/rawhttp@v0.2.0
 ```
 
 Testler ayrı modülde (`test/`); çalıştırmak için: `cd test && go test ./...`
@@ -78,11 +78,11 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Hot-path request parsing keeps `Method` / `Path` / headers as buffer slices; plaintext hello is **0 allocs/op** (CI gate)
 - Protocol hardening (Host, CL/TE, smuggling corpus, fuzz CI) — see [SECURITY.md](SECURITY.md)
 - Forms, multipart, cookies, JSON helpers, static files (`FS` / `SendFile`)
-- Streaming (request/response), connection `Hijack`, timeouts
+- Streaming (request/response), connection `Hijack`, optional `AllowUpgrade` for standards-shaped WebSocket handshakes (no frame codec)
 - Middleware helpers (CORS, compress, rate limit, auth, …) — compose by wrapping `Handler`
 - Proxy dialers (HTTP CONNECT / SOCKS5), `TCPDialer` + DNS cache
 
-**Not included in v0.1.0:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
+**Not included in v0.2.0:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
 
 ## Documentation
 
@@ -105,7 +105,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 ## Benchmarks
 
-Measured on **2026-09-29**, **v0.1.0**, Go **1.25.13**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns/RPS are **host-specific** and vary with load; treat CI ServeConn floors as authoritative (see [docs/performance.md](docs/performance.md)).
+Measured on **2026-09-29**, **v0.1.0 baseline numbers** (still representative under v0.2.0 ServeConn gates), Go **1.25.13**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns/RPS are **host-specific** and vary with load; treat CI ServeConn floors as authoritative (see [docs/performance.md](docs/performance.md)).
 
 On ServeConn microbenches, RawHTTP is typically about **2.5–3×** fasthttp on plaintext hello with **0 allocs/op**. On same-host TCP multi-rival runs, RawHTTP, fasthttp, and gnet often sit in the **same band**; ranking can change between runs. Prefer measured tables below as a snapshot, not a guarantee of always finishing first.
 
@@ -183,7 +183,7 @@ Absolute ns/op below are **host-specific** (re-measure on your machine).
 | **RawHTTP** | **453.8** | 0 | **0** | — |
 | fasthttp | 936.2 | 0 | 0 | 2.06× |
 
-### CI performance contract (v0.1.0)
+### CI performance contract (v0.2.0)
 
 ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus scenario floors (see [docs/performance.md](docs/performance.md) for soft 0.85× / trim / soft-retry). Floors today:
 
@@ -230,9 +230,11 @@ if err := c.Get("http://127.0.0.1:8080/", resp); err != nil {
 | Job | What |
 |-----|------|
 | unit + security | `test/` + security corpus |
-| race / coverage / style / vuln / build | standard |
-| gate | ServeConn rivals + allocs |
-| fuzz | ServeConn, request-line, headers, chunked |
+| race | race detector; also `-tags rawhttp_poison` |
+| coverage / style / vuln / build | standard |
+| gate | ServeConn rival floors + allocs (`TestGate_*` / `TestAllocs_*`) |
+| fuzz | ServeConn, request-line, headers, chunked, differential ReadRequest |
+| nightly fuzz | longer fuzz (schedule + `workflow_dispatch`) |
 
 ## Used by
 

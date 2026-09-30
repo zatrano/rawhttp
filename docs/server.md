@@ -38,6 +38,7 @@ _ = s.Shutdown(ctx) // or s.Close()
 | `DisablePathNormalizing` | Allow `..` segments (proxy use) |
 | `FormValueFunc` | Custom `FormValue` order (`NetHTTPFormValueFunc`) |
 | `KeepHijackedConns` | Do not Close after Hijack |
+| `AllowUpgrade` | Opt-in: admit a standards-shaped WebSocket handshake to the handler (default **false** → 400). No frame codec; see [hijacking.md](hijacking.md) |
 | `ReduceMemoryUsage` | Drop large body buffers after request |
 | `ErrorHandler` / `ErrorCallback` / `ErrorLog` | Errors / panics |
 | `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits |

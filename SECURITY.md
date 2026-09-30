@@ -4,13 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | yes (best-effort) |
+| 0.2.x   | yes (best-effort) |
+| 0.1.x   | best-effort (superseded) |
 
 Report issues via GitHub. Do not open public issues for unfixed zero-days without coordinated disclosure.
 
 ## Guarantees (honest)
 
-RawHTTP **v0.1** is an experimental high-performance HTTP/1.1 server and client. It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
+RawHTTP **v0.2** is an experimental high-performance HTTP/1.1 server and client. It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
 
 It is **not** claimed to be:
 
@@ -127,6 +128,7 @@ cd test && go test -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
 cd test && go test -count=1 -run '^TestSecurity' -v
 cd test && go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
 cd test && go test -race -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
+cd test && go test -race -tags rawhttp_poison -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
 cd test && go test -run '^TestGate_' -count=1 -v
 go run ./scripts/plaintextbench -c 256 -d 10s
 gofmt -l .
@@ -135,17 +137,17 @@ staticcheck ./...
 govulncheck ./...
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR/tag:
+GitHub Actions runs on every push/PR:
 
 1. **unit + security** — all `test/` tests except long fasthttp gates
-2. **race** — race detector (`test/`)
+2. **race** — race detector (`test/`), plus a second job under `-tags rawhttp_poison`
 3. **coverage** — `rawhttp` package ≥70% statement coverage
 4. **style** — gofmt, go vet, staticcheck, golangci-lint
 5. **vuln** — govulncheck
 6. **build** — go build + go mod tidy
 7. **gate** — ServeConn rival floors + never-slower trimmed rounds + 0-alloc hello (see `docs/performance.md`)
-8. **fuzz** — short `FuzzServeConn` / request-line / headers / chunked runs
-
+8. **fuzz** — short ServeConn / request-line / headers / chunked / differential ReadRequest runs
+9. **nightly fuzz** — longer fuzz via schedule / `workflow_dispatch`
 `TestSecurityAttackCorpus` attempts request smuggling, Host/path abuse,
 chunk/trailer attacks, response splitting, and header bombs — RawHTTP must reject them
 without invoking the handler.

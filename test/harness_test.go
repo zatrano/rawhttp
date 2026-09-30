@@ -25,6 +25,7 @@ type fakeConn struct {
 	discard       bool
 	doneCh        chan struct{}
 	once          sync.Once
+	mu            sync.Mutex
 	readDeadline  time.Time
 	writeDeadline time.Time
 }
@@ -47,18 +48,28 @@ func (c *fakeConn) deadlineErr(d time.Time) error {
 }
 
 func (c *fakeConn) Read(b []byte) (int, error) {
-	if err := c.deadlineErr(c.readDeadline); err != nil {
+	c.mu.Lock()
+	d := c.readDeadline
+	c.mu.Unlock()
+	if err := c.deadlineErr(d); err != nil {
 		return 0, err
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.r.Read(b)
 }
 func (c *fakeConn) Write(b []byte) (int, error) {
-	if err := c.deadlineErr(c.writeDeadline); err != nil {
+	c.mu.Lock()
+	d := c.writeDeadline
+	c.mu.Unlock()
+	if err := c.deadlineErr(d); err != nil {
 		return 0, err
 	}
 	if c.discard {
 		return len(b), nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.w.Write(b)
 }
 func (c *fakeConn) Close() error {
@@ -68,16 +79,22 @@ func (c *fakeConn) Close() error {
 func (c *fakeConn) LocalAddr() net.Addr  { return dummyAddr{} }
 func (c *fakeConn) RemoteAddr() net.Addr { return dummyAddr{} }
 func (c *fakeConn) SetDeadline(t time.Time) error {
+	c.mu.Lock()
 	c.readDeadline = t
 	c.writeDeadline = t
+	c.mu.Unlock()
 	return nil
 }
 func (c *fakeConn) SetReadDeadline(t time.Time) error {
+	c.mu.Lock()
 	c.readDeadline = t
+	c.mu.Unlock()
 	return nil
 }
 func (c *fakeConn) SetWriteDeadline(t time.Time) error {
+	c.mu.Lock()
 	c.writeDeadline = t
+	c.mu.Unlock()
 	return nil
 }
 

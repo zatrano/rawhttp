@@ -65,7 +65,7 @@ Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):
 | HostClient vs fasthttp | ≥1.15× |
 | Allocs plaintext hello | 0 |
 
-Optional `scripts/multibench -strict` is a **separate**, noisier TCP ranking helper (same-process load client); treat CI ServeConn gates as the regression contract.
+Optional `scripts/multibench -strict` is a **local-only** ranking helper (exits 2 if rawhttp is not #1 / pairwise < 1.00�). CI runs multibench **without** `-strict` so ranking stays informational; host noise can flip TCP order. Treat CI ServeConn gates (`TestGate_*`) as the regression contract.
 
 ```bash
 cd test && go test -run 'Gate|Allocs' -count=1 -v

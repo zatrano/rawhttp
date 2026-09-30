@@ -32,7 +32,7 @@ import (
 //	 Plaintext ≥8.0×, JSON ≥4.0× (stdlib is alloc-heavy)
 //
 //		cd test && go test -run 'Gate|Allocs' -count=1 -v
-//		cd scripts/multibench && go run . -c 64 -d 3s -strict
+//		cd scripts/multibench && go run . -c 64 -d 3s
 const (
 	gateRequests     = 100_000
 	gateWarmup       = 2

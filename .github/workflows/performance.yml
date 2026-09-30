@@ -18,7 +18,7 @@ jobs:
       - name: ServeConn gates + allocs
         working-directory: test
         run: go test -run '^(TestGate_|TestAllocs_)' -count=1 -timeout 8m -v
-      - name: Multi-rival TCP strict
+      - name: Multi-rival TCP (informational)
         working-directory: scripts/multibench
-        run: go run . -c 64 -d 3s -rounds 3 -strict -scenarios plaintext,json
+        run: go run . -c 64 -d 3s -rounds 3 -scenarios plaintext,json
         timeout-minutes: 25

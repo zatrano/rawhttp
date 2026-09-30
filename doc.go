@@ -20,9 +20,10 @@
 // See README for limitations.
 //
 // Performance contract: rawhttp must never be slower than fasthttp on timed
-// ServeConn gates, and must stay ≥3× on plaintext / ≥1.65× on JSON
+// ServeConn gates, and must stay ≥2.35× on plaintext / ≥1.65× on JSON
 // (enforced by test/TestGate_FasterThanFastHTTP_*) with 0 allocs/op on the
-// hello path (TestAllocs_PlaintextHello). Client keep-alive gate is ≥1.15×.
+// hello path (TestAllocs_PlaintextHello). Client keep-alive comparison is
+// informational (noisy pipe microbench; see test/gate_test.go).
 package rawhttp
 
 import (

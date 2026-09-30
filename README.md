@@ -113,7 +113,7 @@ On ServeConn microbenches, rawhttp is typically about **2.5–3×** fasthttp on 
 cd scripts/multibench && go run . -c 64 -d 3s -rounds 3
 ```
 
-Conditions: keep-alive HTTP/1.1; **same** `fasthttp.HostClient` for every server; c=64; 1s warmup + 3s timed; **3 rounds median** per server with **rotated start order**; scenarios `plaintext`, `json`, `headers`, `chunked`. Optional `-strict` applies a local ranking gate (noisy on shared hosts — see performance docs).
+Conditions: keep-alive HTTP/1.1; **same** `fasthttp.HostClient` for every server; c=64; 1s warmup + 3s timed; **3 rounds median** per server with **rotated start order**; scenarios `plaintext`, `json`, `headers`, `chunked`. Optional `-strict` is a **local** ranking check only (CI does not fail on it — see [performance](docs/performance.md)).
 
 Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not a full HTTP stack). **Hertz** on Windows used `network library=standard`.
 
@@ -187,9 +187,9 @@ ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus sc
 
 | Gate | Floor |
 |------|-------|
-| ServeConn vs fasthttp plaintext / JSON / headers / chunked | ≥3.0× / ≥1.65× / ≥1.5× / ≥1.5× |
+| ServeConn vs fasthttp plaintext / JSON / headers / chunked | ≥2.35× / ≥1.65× / ≥1.5× / ≥1.5× |
 | ServeConn vs net/http plaintext / JSON | ≥8.0× / ≥4.0× |
-| HostClient vs fasthttp | ≥1.15× |
+| HostClient vs fasthttp | ≥1.05× (informational) |
 | plaintext hello | **0 allocs/op** |
 
 ```bash

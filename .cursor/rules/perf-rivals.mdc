@@ -1,4 +1,4 @@
-﻿# Performance contract (mandatory)
+# Performance contract (mandatory)
 
 rawhttp must **never** be slower than these rivals on CI ServeConn gates:
 
@@ -10,7 +10,7 @@ ranking there is **informational** in CI (host noise). Optional `-strict` is loc
 
 ## Gates
 
-1. **ServeConn** (`test/gate_test.go`): fasthttp floors (plaintext ≥3.0×, JSON ≥1.65×, …) + net/http floors.
+1. **ServeConn** (`test/gate_test.go`): fasthttp floors (plaintext ≥2.35×, JSON ≥1.65×, headers/chunked ≥1.5×) + net/http floors. HostClient gate is informational. Floors are machine-calibrated (see comments in `gate_test.go`).
 2. **TCP multi-rival** (`scripts/multibench`): plaintext, json, headers, chunked — printed in CI without failing the job. Use `-strict` only for optional local ranking checks.
 
 ## When changing hot path

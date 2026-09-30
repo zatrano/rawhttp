@@ -7,9 +7,9 @@ import (
 	"github.com/zatrano/rawhttp"
 )
 
-// Upgrade requests are rejected before the handler runs (400). There is no
-// AllowUpgrade bypass. Hijack is for custom protocols on ordinary requests only,
-// not for completing a WebSocket Upgrade handshake.
+// Upgrade requests are rejected before the handler runs (400) unless
+// Server.AllowUpgrade is set. Hijack without Upgrade remains available for
+// custom protocols.
 
 func TestWebSocketUpgradeNeverReachesHandler(t *testing.T) {
 	req := "" +

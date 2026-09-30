@@ -25,6 +25,9 @@ func poisonPinnedBuffer(cr *connReader) {
 // poisonCtxRequestSlices fills owned request copies and clears Ctx request
 // slice fields. Call after writeResponse so response body refs stay intact.
 func poisonCtxRequestSlices(ctx *Ctx) {
+	poisonBytes(ctx.upgradeProto)
+	ctx.upgradeProto = nil
+	ctx.upgradeWanted = false
 	poisonBytes(ctx.Method)
 	poisonBytes(ctx.Path)
 	poisonBytes(ctx.Query)
@@ -75,6 +78,8 @@ func poisonCtxRequestSlices(ctx *Ctx) {
 	ctx.Query = nil
 	ctx.host = nil
 	ctx.headerBlock = nil
+	ctx.upgradeProto = nil
+	ctx.upgradeWanted = false
 	ctx.reqContentType = nil
 	ctx.userAgent = nil
 	ctx.accept = nil

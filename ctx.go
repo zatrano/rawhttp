@@ -30,6 +30,8 @@ type Ctx struct {
 	head            bool // HEAD method
 	forceClose      bool // SetConnectionClose
 	respChunked     bool // Transfer-Encoding: chunked response
+	upgradeWanted   bool // Connection contained upgrade token
+	upgradeProto    []byte // raw Upgrade header value (may alias buffer)
 
 	headerBlock []byte
 	hdrCopy     []byte
@@ -139,6 +141,8 @@ func (c *Ctx) reset() {
 	c.head = false
 	c.forceClose = false
 	c.respChunked = false
+	c.upgradeWanted = false
+	c.upgradeProto = nil
 	c.headerBlock = nil
 	c.host = nil
 	c.reqContentType = nil

@@ -193,6 +193,12 @@ type Server struct {
 	// fasthttp: the accept loop closes the conn when the serve goroutine ends.
 	KeepHijackedConns bool
 
+	// AllowUpgrade, when true, admits a standards-shaped WebSocket handshake
+	// (GET HTTP/1.1, Connection upgrade token, Upgrade: websocket, key/version)
+	// to the Handler so it can Hijack. Default false rejects Upgrade /
+	// Connection: upgrade with 400 before the handler (safe default).
+	AllowUpgrade bool
+
 	// ReduceMemoryUsage, when true, drops request body buffers after each
 	// request so large uploads do not retain capacity across keep-alive.
 	ReduceMemoryUsage bool
@@ -784,8 +790,13 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			}
 		}
 
-		if err := parseHeaders(cr, ctx, maxHdrs, maxHdrBytes); err != nil {
+		if err := parseHeaders(cr, ctx, maxHdrs, maxHdrBytes, s.AllowUpgrade); err != nil {
 			return s.clientError(conn, err)
+		}
+		if s.AllowUpgrade && (ctx.upgradeWanted || len(ctx.upgradeProto) > 0) {
+			if err := validateWebSocketUpgrade(ctx); err != nil {
+				return s.clientError(conn, err)
+			}
 		}
 
 		reqMaxBody := maxBody
@@ -1009,6 +1020,11 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		}
 
 		closeConn := ctx.shouldClose(disableKA) || s.shutting.Load()
+		// Admitted Upgrade handshakes that were not Hijack()'d must not keep-alive:
+		// leftover bytes are not a next HTTP request.
+		if ctx.upgradeWanted {
+			closeConn = true
+		}
 		if maxReq > 0 && reqNum >= uint64(maxReq) {
 			closeConn = true
 		}

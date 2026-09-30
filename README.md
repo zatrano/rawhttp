@@ -80,7 +80,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Middleware helpers (CORS, compress, rate limit, auth, …) — compose by wrapping `Handler`
 - Proxy dialers (HTTP CONNECT / SOCKS5), `TCPDialer` + DNS cache
 
-**Not included in v0.1.0:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket stack. Standard `Upgrade: websocket` requests are **rejected** with 400; `Hijack` is for upgrade-free custom protocols only — see [Hijacking](docs/hijacking.md).
+**Not included in v0.1.0:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
 
 ## Documentation
 

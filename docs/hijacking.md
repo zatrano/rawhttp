@@ -117,14 +117,14 @@ After `Hijack`, when the handler **returns**, the accept-loop goroutine ends and
 
 With `KeepHijackedConns: true` the TCP conn stays open for the caller, but it **no longer counts** toward those limits. `Shutdown` waits only for accept-loop goroutines (`activeConn`); it does **not** wait on or close KeepHijacked connections after the handler returns (similar to `net/http`: the hijacker owns the conn). `Close` force-closes tracked conns still in the map; a KeepHijacked conn already removed from tracking is not closed by `Shutdown`.
 
-### Hijack edilmiş bağlantı sayımı
+### Hijacked connection accounting
 
-`Concurrency` / `MaxConnsPerIP` yalnızca accept-loop yaşamına bağlıdır. Handler `Hijack` sonrası **döner dönmez** slot serbest kalır; uzun ömürlü WebSocket oturumları bu sayaçlarda görünmez.
+`Concurrency` / `MaxConnsPerIP` track accept-loop lifetime only. As soon as the handler **returns** after `Hijack`, the slot is released; long-lived WebSocket sessions do not appear in those counters.
 
-WebSocket sayısını sınırlamak için:
+To bound WebSocket concurrency:
 
-1. **Handler içinde tut** — frame döngüsünü handler return etmeden çalıştır (slot meşgul kalır; `KeepHijackedConns` gerekmez), veya
-2. **Uygulama limteri** — handler hızlı dönüyorsa kendi semaphor’unuzla sınırlayın:
+1. **Stay in the handler** — run the frame loop before returning (the slot stays occupied; `KeepHijackedConns` is unnecessary), or
+2. **Application limiter** — if the handler returns quickly, gate with your own semaphore:
 
 ```go
 var wsSem = make(chan struct{}, 64) // max 64 concurrent WS

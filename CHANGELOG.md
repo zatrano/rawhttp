@@ -15,10 +15,6 @@
 - `scripts/multibench -strict` is local-only; CI ranking is informational. Blocking gates remain `TestGate_*` (ServeConn).
 - `Hijack` clears connection deadlines so the caller owns timeouts.
 
-### Fixed
-
-- Repeated `Connection` headers no longer clear an earlier `upgrade` token when `AllowUpgrade` is true (a later `Connection` without `upgrade` used to skip WebSocket admission checks and reach the handler). Found by `FuzzUpgradePredicate`; regression seed + `TestConnectionUpgradeTokenSticky`. Default (`AllowUpgrade=false`) already rejected on the first upgrade token.
-
 ### Documentation
 
 - README / SECURITY / `docs/hijacking.md` / `docs/performance.md` / `docs/production.md` aligned with Upgrade rejection, AllowUpgrade, poison testing, per-connection memory, and hijacked-connection accounting.

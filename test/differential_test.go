@@ -2,6 +2,7 @@ package test_test
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -60,8 +61,13 @@ func differentialCorpus() []diffCase {
 }
 
 func rawhttpOutcome(raw string) (handlerCalled bool, statusPrefix string) {
+	return rawhttpOutcomeAllow(raw, false)
+}
+
+func rawhttpOutcomeAllow(raw string, allowUpgrade bool) (handlerCalled bool, statusPrefix string) {
 	srv := &rawhttp.Server{
 		ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1,
+		AllowUpgrade: allowUpgrade,
 		Handler: func(ctx *rawhttp.Ctx) {
 			handlerCalled = true
 			ctx.SetBody([]byte("ok"))
@@ -71,7 +77,6 @@ func rawhttpOutcome(raw string) (handlerCalled bool, statusPrefix string) {
 	_ = srv.ServeConn(fc)
 	resp := fc.w.String()
 	if len(resp) >= 12 {
-		// "HTTP/1.1 XXX"
 		parts := strings.SplitN(resp, " ", 3)
 		if len(parts) >= 2 {
 			statusPrefix = parts[1]
@@ -149,15 +154,19 @@ func TestDifferentialCorpus(t *testing.T) {
 
 func FuzzDifferentialNetHTTP(f *testing.F) {
 	for _, tc := range differentialCorpus() {
-		f.Add([]byte(tc.raw))
+		f.Add([]byte(tc.raw), false)
+		f.Add([]byte(tc.raw), true)
 	}
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(t *testing.T, data []byte, allowUpgrade bool) {
 		if len(data) == 0 || len(data) > 8<<10 {
 			t.Skip()
 		}
-		// Must not panic either side.
-		_, _ = rawhttpOutcome(string(data))
-		// net/http path may hang on incomplete reads; use short deadline via helper.
+		rhCalled, rhStatus := rawhttpOutcomeAllow(string(data), allowUpgrade)
+		if !allowUpgrade && requestLooksLikeUpgrade(data) {
+			if rhCalled && rhStatus == "200" {
+				t.Fatalf("AllowUpgrade=false must reject upgrade-shaped input; status=%s", rhStatus)
+			}
+		}
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Skip(err)
@@ -183,4 +192,44 @@ func FuzzDifferentialNetHTTP(f *testing.F) {
 			_ = resp.Body.Close()
 		}
 	})
+}
+
+// FuzzDifferentialReadRequest compares rawhttp ServeConn against net/http's
+// http.ReadRequest on the same bytes (parse acceptance), for both AllowUpgrade
+// settings. When AllowUpgrade is false, upgrade-shaped requests must not get 200.
+func FuzzDifferentialReadRequest(f *testing.F) {
+	for _, tc := range differentialCorpus() {
+		f.Add([]byte(tc.raw), false)
+		f.Add([]byte(tc.raw), true)
+	}
+	f.Fuzz(func(t *testing.T, data []byte, allowUpgrade bool) {
+		if len(data) == 0 || len(data) > 8<<10 {
+			t.Skip()
+		}
+		rhCalled, rhStatus := rawhttpOutcomeAllow(string(data), allowUpgrade)
+		if !allowUpgrade && requestLooksLikeUpgrade(data) {
+			if rhCalled && rhStatus == "200" {
+				t.Fatalf("AllowUpgrade=false accepted upgrade-shaped request")
+			}
+		}
+		br := bufio.NewReader(bytes.NewReader(data))
+		req, err := http.ReadRequest(br)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, req.Body)
+			_ = req.Body.Close()
+		}
+		// Must not panic; ReadRequest result is informational (std client parser).
+		_ = err
+	})
+}
+
+func requestLooksLikeUpgrade(data []byte) bool {
+	lower := bytes.ToLower(data)
+	if !bytes.Contains(lower, []byte("upgrade")) {
+		return false
+	}
+	// Connection: …upgrade… or Upgrade: header present.
+	return bytes.Contains(lower, []byte("\nupgrade:")) ||
+		bytes.Contains(lower, []byte("\r\nupgrade:")) ||
+		bytes.Contains(lower, []byte("connection:")) && bytes.Contains(lower, []byte("upgrade"))
 }

@@ -30,8 +30,12 @@ jobs:
         with:
           go-version: "1.25.x"
           cache: true
-      - working-directory: test
+      - name: Race (default build)
+        working-directory: test
         run: go test -race -count=1 -timeout 10m -skip '^(TestGate_|TestAllocs_)' ./...
+      - name: Race (rawhttp_poison)
+        working-directory: test
+        run: go test -race -tags rawhttp_poison -count=1 -timeout 10m -skip '^(TestGate_|TestAllocs_)' ./...
 
   coverage:
     name: coverage
@@ -83,3 +87,4 @@ jobs:
           go test -timeout 3m -run=^$ -fuzz=FuzzRequestLine -fuzztime=8s
           go test -timeout 3m -run=^$ -fuzz=FuzzHeaders -fuzztime=8s
           go test -timeout 3m -run=^$ -fuzz=FuzzChunkedBody -fuzztime=8s
+          go test -timeout 3m -run=^$ -fuzz=FuzzDifferentialReadRequest -fuzztime=8s

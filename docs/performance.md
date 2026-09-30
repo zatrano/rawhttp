@@ -32,10 +32,10 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 | Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
-| plaintext | 138 416 | **138 809** | 136 687 | 132 666 | 97 111 |
-| json | **146 810** | 129 902 | 135 975 | 133 248 | 80 363 |
-| headers | **146 597** | 137 797 | 135 601 | 119 325 | 70 868 |
-| chunked | **144 498** | 135 338 | 131 115 | 133 532 | 75 795 |
+| plaintext | **148 308** | 127 987 | 112 059 | 63 732 | 75 491 |
+| json | 135 866 | **141 706** | 122 228 | 129 774 | 80 258 |
+| headers | **149 336** | 141 565 | 136 038 | 133 335 | 95 238 |
+| chunked | **148 796** | 132 873 | 137 856 | 137 253 | 84 202 |
 
 Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 
@@ -43,10 +43,10 @@ Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 
 | Bench | RawHTTP | fasthttp | net/http |
 |-------|--------:|---------:|---------:|
-| Plaintext ns/op (allocs) | **217 (0)** | 634 (0) | 6801 (13) |
-| JSON POST ns/op (allocs) | **402 (0)** | 750 (0) | — |
+| Plaintext ns/op (allocs) | **256 (0)** | 789 (0) | 10223 (13) |
+| JSON POST ns/op (allocs) | **597 (0)** | 937 (0) | — |
 
-ServeConn plaintext (this snapshot): about **2.9×** vs fasthttp, **0 allocs** (host-specific; CI floors are separate).
+ServeConn plaintext (this snapshot): about **3.1×** vs fasthttp, **0 allocs** (host-specific; CI floors are separate).
 ## CI ServeConn gate mechanics
 
 Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):

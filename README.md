@@ -21,7 +21,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
-[![Peak RPS](https://img.shields.io/badge/Peak%20RPS-147k-2ea44f?style=flat-square)](#benchmarks)
+[![Peak RPS](https://img.shields.io/badge/Peak%20RPS-149k-2ea44f?style=flat-square)](#benchmarks)
 [![Errors](https://img.shields.io/badge/Errors-0-2ea44f?style=flat-square)](#benchmarks)
 [![Max connections](https://img.shields.io/badge/Max%20connections-262144-0366d6?style=flat-square)](docs/server.md)
 [![Peak memory](https://img.shields.io/badge/Peak%20memory-0%20alloc%20hello-2ea44f?style=flat-square)](#benchmarks)
@@ -123,41 +123,41 @@ Notes: Hertz on Windows used `network library=standard`. Multibench uses a share
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | fasthttp | **138 809** |
-| 2 | **RawHTTP** | **138 416** |
-| 3 | gnet | 136 687 |
-| 4 | Hertz | 132 666 |
-| 5 | net/http | 97 111 |
+| 1 | **RawHTTP** | **148 308** |
+| 2 | fasthttp | 127 987 |
+| 3 | gnet | 112 059 |
+| 4 | net/http | 75 491 |
+| 5 | Hertz | 63 732 |
 
 #### json — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **146 810** |
-| 2 | gnet | 135 975 |
-| 3 | Hertz | 133 248 |
-| 4 | fasthttp | 129 902 |
-| 5 | net/http | 80 363 |
+| 1 | fasthttp | **141 706** |
+| 2 | **RawHTTP** | **135 866** |
+| 3 | Hertz | 129 774 |
+| 4 | gnet | 122 228 |
+| 5 | net/http | 80 258 |
 
 #### headers — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **146 597** |
-| 2 | fasthttp | 137 797 |
-| 3 | gnet | 135 601 |
-| 4 | Hertz | 119 325 |
-| 5 | net/http | 70 868 |
+| 1 | **RawHTTP** | **149 336** |
+| 2 | fasthttp | 141 565 |
+| 3 | gnet | 136 038 |
+| 4 | Hertz | 133 335 |
+| 5 | net/http | 95 238 |
 
 #### chunked (POST body echo) — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **144 498** |
-| 2 | fasthttp | 135 338 |
-| 3 | Hertz | 133 532 |
-| 4 | gnet | 131 115 |
-| 5 | net/http | 75 795 |
+| 1 | **RawHTTP** | **148 796** |
+| 2 | gnet | 137 856 |
+| 3 | Hertz | 137 253 |
+| 4 | fasthttp | 132 873 |
+| 5 | net/http | 84 202 |
 
 ### ServeConn microbench (`test/`)
 
@@ -172,16 +172,16 @@ Absolute ns/op below are **host-specific** (median of 3 runs; re-measure on your
 
 | Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **RawHTTP** | **217** | 0 | **0** | — |
-| fasthttp | 634 | 0 | 0 | 2.92× |
-| net/http | 6801 | 1346 | 13 | 31.3× |
+| **RawHTTP** | **256** | 0 | **0** | — |
+| fasthttp | 789 | 0 | 0 | 3.08× |
+| net/http | 10223 | 1347 | 13 | 39.9× |
 
 #### JSON POST
 
 | Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **RawHTTP** | **402** | 0 | **0** | — |
-| fasthttp | 750 | 0 | 0 | 1.87× |
+| **RawHTTP** | **597** | 0 | **0** | — |
+| fasthttp | 937 | 0 | 0 | 1.57× |
 
 ### CI performance contract (v0.2.1)
 
@@ -207,8 +207,8 @@ cd test && go test -run 'Gate|Allocs' -v
 | Router | bring your own | `ServeMux` | bring your own | built-in | N/A (raw) |
 | Ctx model | `*Ctx` | `ResponseWriter`+`Request` | `RequestCtx` | `RequestContext` | custom |
 | Typical use | engine under apps | general Go | Fiber / custom | microservices | custom protocols |
-| This-host plaintext TCP (median snapshot) | **138.4k** | 97.1k | **138.8k** | 132.7k | 136.7k |
-| This-host ServeConn plaintext | **217 ns**, 0 alloc | 6801 ns, 13 alloc | 634 ns, 0 alloc | — | — |
+| This-host plaintext TCP (median snapshot) | **148.3k** | 75.5k | 128.0k | 63.7k | 112.1k |
+| This-host ServeConn plaintext | **256 ns**, 0 alloc | 10223 ns, 13 alloc | 789 ns, 0 alloc | — | — |
 
 Snapshot ranking is host-specific. Methodology and gate floors: [docs/performance.md](docs/performance.md).
 ## Client

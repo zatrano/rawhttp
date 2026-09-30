@@ -338,9 +338,11 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 				if upH && !allowUpgrade {
 					return ErrBadRequest
 				}
-				ctx.upgradeWanted = upH
-				ctx.keepAliveHeader = keepH
-				ctx.closeHeader = closeH
+				// Sticky: a later Connection without "upgrade" must not clear
+				// an earlier upgrade token (AllowUpgrade admission depends on it).
+				ctx.upgradeWanted = ctx.upgradeWanted || upH
+				ctx.keepAliveHeader = ctx.keepAliveHeader || keepH
+				ctx.closeHeader = ctx.closeHeader || closeH
 				known = true
 			} else if len(key) == 12 && isContentType(key) {
 				ctx.reqContentType = val

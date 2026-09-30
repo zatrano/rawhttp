@@ -167,30 +167,15 @@ func FuzzDifferentialNetHTTP(f *testing.F) {
 				t.Fatalf("AllowUpgrade=false must reject upgrade-shaped input; status=%s", rhStatus)
 			}
 		}
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Skip(err)
-		}
-		defer ln.Close()
+		// In-memory http.Server on fakeConn (EOF after bytes) — no Listen/Pipe.
+		// net.Pipe + ReadResponse stalls on incomplete CL/TE bodies (deadline/IO).
+		fc := newDiscardConn(data)
 		srv := &http.Server{
-			Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }),
-			ReadHeaderTimeout: 200 * time.Millisecond,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(200)
+			}),
 		}
-		go srv.Serve(ln) //nolint:errcheck
-		defer srv.Close()
-		conn, err := net.DialTimeout("tcp", ln.Addr().String(), time.Second)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		_ = conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
-		_, _ = conn.Write(data)
-		br := bufio.NewReader(conn)
-		resp, err := http.ReadResponse(br, &http.Request{Method: "GET"})
-		if err == nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-		}
+		_ = srv.Serve(&oneConnListener{conn: fc})
 	})
 }
 
@@ -224,12 +209,46 @@ func FuzzDifferentialReadRequest(f *testing.F) {
 }
 
 func requestLooksLikeUpgrade(data []byte) bool {
-	lower := bytes.ToLower(data)
+	// Only inspect the header block — body may contain the word "upgrade".
+	head := data
+	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
+		head = data[:i]
+	} else if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
+		head = data[:i]
+	}
+	lower := bytes.ToLower(head)
 	if !bytes.Contains(lower, []byte("upgrade")) {
 		return false
 	}
-	// Connection: …upgrade… or Upgrade: header present.
 	return bytes.Contains(lower, []byte("\nupgrade:")) ||
-		bytes.Contains(lower, []byte("\r\nupgrade:")) ||
-		bytes.Contains(lower, []byte("connection:")) && bytes.Contains(lower, []byte("upgrade"))
+		bytes.HasPrefix(lower, []byte("upgrade:")) ||
+		(bytes.Contains(lower, []byte("connection:")) && hasConnectionUpgradeToken(lower))
+}
+
+func hasConnectionUpgradeToken(lowerHeader []byte) bool {
+	// Scan Connection header values for an "upgrade" token (comma or OWS separated).
+	for _, line := range bytes.Split(lowerHeader, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if !bytes.HasPrefix(line, []byte("connection:")) {
+			continue
+		}
+		val := bytes.TrimSpace(line[len("connection:"):])
+		for len(val) > 0 {
+			for len(val) > 0 && (val[0] == ' ' || val[0] == '\t' || val[0] == ',') {
+				val = val[1:]
+			}
+			if len(val) == 0 {
+				break
+			}
+			end := 0
+			for end < len(val) && val[end] != ',' && val[end] != ' ' && val[end] != '\t' {
+				end++
+			}
+			if bytes.Equal(val[:end], []byte("upgrade")) {
+				return true
+			}
+			val = val[end:]
+		}
+	}
+	return false
 }

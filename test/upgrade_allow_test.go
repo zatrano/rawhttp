@@ -136,6 +136,7 @@ func TestAllowUpgrade_NegativeCorpus(t *testing.T) {
 			"Sec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"},
 		{"Connection upgrade without Upgrade header", "GET /ws HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\n" +
 			"Sec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"},
+		{"second Connection clears upgrade token", "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nConnection: close\r\n\r\n"},
 	}
 	srv := &rawhttp.Server{ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1, AllowUpgrade: true}
 	for _, tc := range cases {

@@ -32,6 +32,8 @@ func (c *Ctx) Hijack() (conn net.Conn, leftover []byte, err error) {
 	conn = c.conn
 	c.conn = nil
 	c.cacheOK = false
+	// Clear server-imposed deadlines; the caller owns timeouts after Hijack.
+	_ = conn.SetDeadline(time.Time{})
 	return conn, leftover, nil
 }
 

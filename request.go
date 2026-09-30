@@ -227,7 +227,7 @@ func hasDotDotSegment(path []byte) bool {
 	return bytes.Contains(path, []byte("/../"))
 }
 
-func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int) error {
+func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUpgrade bool) error {
 	start := cr.off
 	nHdr := 0
 	for {
@@ -335,11 +335,14 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int) error {
 				known = true
 			} else if len(key) == 10 && isConnection(key) {
 				closeH, keepH, upH := parseConnectionDirectives(val)
-				if upH {
+				if upH && !allowUpgrade {
 					return ErrBadRequest
 				}
-				ctx.keepAliveHeader = keepH
-				ctx.closeHeader = closeH
+				// Sticky: a later Connection without "upgrade" must not clear
+				// an earlier upgrade token (AllowUpgrade admission depends on it).
+				ctx.upgradeWanted = ctx.upgradeWanted || upH
+				ctx.keepAliveHeader = ctx.keepAliveHeader || keepH
+				ctx.closeHeader = ctx.closeHeader || closeH
 				known = true
 			} else if len(key) == 12 && isContentType(key) {
 				ctx.reqContentType = val
@@ -375,7 +378,11 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int) error {
 			}
 		case 'u':
 			if len(key) == 7 && isUpgrade(key) {
-				return ErrBadRequest
+				if !allowUpgrade {
+					return ErrBadRequest
+				}
+				ctx.upgradeProto = val
+				known = true
 			}
 			if len(key) == 10 && isUserAgent(key) {
 				ctx.userAgent = val

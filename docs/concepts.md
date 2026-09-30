@@ -47,6 +47,8 @@ One function per request. Compose behavior by wrapping handlers (middleware).
 
 `*Ctx` is the request/response cycle object: method, path, headers, body, response builders. Values that alias the read buffer must not be retained after the handler returns (unless copied).
 
+Downstream packages should run their integration tests with `-tags rawhttp_poison` so accidental post-handler retention of Method/Path/headers/body fails loudly (debug fill `0xDE`). Default builds have no poison cost.
+
 ### Connection lifecycle
 
 1. Accept

@@ -2,7 +2,7 @@
 
 Public surface of `github.com/zatrano/rawhttp` (v0.1.0). Signatures are summarized; see GoDoc / source for full field lists and edge cases.
 
-There is **no** path-parameter router, **no** `DisableHeaderNamesNormalizing`, and **no** WebSocket helper in this package.
+There is **no** path-parameter router, **no** `DisableHeaderNamesNormalizing`, and **no** WebSocket frame codec in this package. Default parsing **rejects** `Upgrade` / `Connection: upgrade` with 400. Set `Server.AllowUpgrade` to admit a standards-shaped handshake to the handler for `Hijack` (see [Hijacking](hijacking.md)).
 
 ## Package entry
 
@@ -179,5 +179,5 @@ See [errors.md](errors.md).
 ## Thread-safety
 
 - `Server` methods: do not mutate config after Serve starts.
-- `Ctx`: request-scoped; do not retain buffer slices after the handler returns.
+- `Ctx`: request-scoped; do not retain buffer slices after the handler returns. Debug: `-tags rawhttp_poison` fills retained request bytes with `0xDE` after the handler (see [concepts](concepts.md)).
 - Pooled client `Request` / `Response`: exclusive until released.

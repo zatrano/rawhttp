@@ -63,18 +63,91 @@ When `KeepHijackedConns` is true, the hijacked conn stays open for the caller to
 
 Typical uses of the low-level connection:
 
-- custom binary protocols after an HTTP request
-- hand-rolled upgrade-style protocols implemented **outside** RawHTTP
+- custom binary protocols after a normal HTTP request (**without** `Upgrade`)
 - debugging / connection inspection
 
-## Hijack ≠ WebSocket
+## Hijack ≠ WebSocket (default)
 
 ```text
 Hijack != WebSocket implementation
 ```
 
-RawHTTP provides **only** low-level connection access via `Hijack`. There is **no** WebSocket helper, handshake API, or frame codec in this package.
+RawHTTP provides **only** low-level connection access via `Hijack`. There is **no** frame codec in this package.
 
-If you need WebSockets, use a separate library on top of the hijacked `net.Conn` (and handle buffering / leftover yourself).
+**Default (`Server.AllowUpgrade == false`):** requests with `Upgrade` or a `Connection` upgrade token get **400** before the handler. A standards-shaped WebSocket handshake never reaches `Hijack`.
 
-On the normal HTTP path RawHTTP rejects `Connection: upgrade` for security; that is not a WebSocket stack.
+**Opt-in (`Server.AllowUpgrade == true`):** a handshake is admitted to the handler only when **all** of these hold:
+
+- method `GET`, HTTP/1.1
+- `Connection` token list contains `upgrade` (e.g. Firefox `keep-alive, Upgrade`)
+- `Upgrade` is exactly the single token `websocket` (case-insensitive)
+- no `Content-Length` / `Transfer-Encoding`
+- `Sec-WebSocket-Version: 13`
+- `Sec-WebSocket-Key` base64-decodes to **16** bytes
+
+The handler must complete the 101 response and framing itself after `Hijack`. `leftover` carries any bytes already buffered past the headers (e.g. a frame sent in the same TCP write as the handshake).
+
+### Origin / CSWSH
+
+RawHTTP does **not** validate `Origin`. Cross-Site WebSocket Hijacking prevention is the **application's** responsibility:
+
+```go
+s.AllowUpgrade = true
+s.Handler = func(ctx *rawhttp.Ctx) {
+	origin := string(ctx.Header("Origin"))
+	if origin != "https://example.com" {
+		ctx.SetStatusCode(403)
+		return
+	}
+	conn, leftover, err := ctx.Hijack()
+	// … 101 + frames; process leftover first
+	_, _, _ = conn, leftover, err
+}
+```
+
+Enabling `AllowUpgrade` expands the attack surface: untrusted clients can reach your Hijack handler with a valid-looking handshake. Keep the default (`false`) unless you implement Origin checks, authentication, and framing carefully.
+
+### Concurrency, MaxConnsPerIP, Shutdown
+
+After `Hijack`, when the handler **returns**, the accept-loop goroutine ends and:
+
+- the `Concurrency` slot is released
+- `MaxConnsPerIP` is decremented
+- `OpenConnections` decreases
+
+With `KeepHijackedConns: true` the TCP conn stays open for the caller, but it **no longer counts** toward those limits. `Shutdown` waits only for accept-loop goroutines (`activeConn`); it does **not** wait on or close KeepHijacked connections after the handler returns (similar to `net/http`: the hijacker owns the conn). `Close` force-closes tracked conns still in the map; a KeepHijacked conn already removed from tracking is not closed by `Shutdown`.
+
+### Hijack edilmiş bağlantı sayımı
+
+`Concurrency` / `MaxConnsPerIP` yalnızca accept-loop yaşamına bağlıdır. Handler `Hijack` sonrası **döner dönmez** slot serbest kalır; uzun ömürlü WebSocket oturumları bu sayaçlarda görünmez.
+
+WebSocket sayısını sınırlamak için:
+
+1. **Handler içinde tut** — frame döngüsünü handler return etmeden çalıştır (slot meşgul kalır; `KeepHijackedConns` gerekmez), veya
+2. **Uygulama limteri** — handler hızlı dönüyorsa kendi semaphor’unuzla sınırlayın:
+
+```go
+var wsSem = make(chan struct{}, 64) // max 64 concurrent WS
+
+s.AllowUpgrade = true
+s.KeepHijackedConns = true
+s.Handler = func(ctx *rawhttp.Ctx) {
+	select {
+	case wsSem <- struct{}{}:
+	default:
+		ctx.SetStatusCode(503)
+		return
+	}
+	conn, leftover, err := ctx.Hijack()
+	if err != nil {
+		<-wsSem
+		return
+	}
+	go func() {
+		defer func() { <-wsSem }()
+		defer conn.Close()
+		// process leftover, then frames…
+		_, _ = leftover, conn
+	}()
+}
+```

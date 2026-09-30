@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1 - 2026-09-30
+
+### Documentation
+
+- Refresh ServeConn / multibench snapshot tables (2026-09-30 remeasure).
+- Align README / SECURITY / guides with v0.2.0 features; RawHTTP display name; English-only docs.
+- Stop tracking `.cursor/` IDE rules in the published tree.
+
 ## v0.2.0 - 2026-09-30
 
 ### Added

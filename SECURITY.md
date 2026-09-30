@@ -5,7 +5,7 @@
 | Version | Supported |
 |---------|-----------|
 | 0.2.x   | yes (best-effort) |
-| 0.1.x   | best-effort (superseded) |
+| 0.1.x   | superseded |
 
 Report issues via GitHub. Do not open public issues for unfixed zero-days without coordinated disclosure.
 

@@ -32,10 +32,10 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 | Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
-| plaintext | **148 308** | 127 987 | 112 059 | 63 732 | 75 491 |
-| json | 135 866 | **141 706** | 122 228 | 129 774 | 80 258 |
-| headers | **149 336** | 141 565 | 136 038 | 133 335 | 95 238 |
-| chunked | **148 796** | 132 873 | 137 856 | 137 253 | 84 202 |
+| plaintext | **149 613** | 126 166 | 115 031 | 108 968 | 76 284 |
+| json | **141 835** | 132 769 | 131 427 | 112 718 | 69 777 |
+| headers | **133 871** | 119 144 | 104 071 | 95 492 | 89 328 |
+| chunked | **139 057** | 130 533 | 129 751 | 126 293 | 76 300 |
 
 Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 

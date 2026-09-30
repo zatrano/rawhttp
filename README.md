@@ -123,41 +123,41 @@ Notes: Hertz on Windows used `network library=standard`. Multibench uses a share
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **148 308** |
-| 2 | fasthttp | 127 987 |
-| 3 | gnet | 112 059 |
-| 4 | net/http | 75 491 |
-| 5 | Hertz | 63 732 |
+| 1 | **RawHTTP** | **149 613** |
+| 2 | fasthttp | 126 166 |
+| 3 | gnet | 115 031 |
+| 4 | Hertz | 108 968 |
+| 5 | net/http | 76 284 |
 
 #### json — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | fasthttp | **141 706** |
-| 2 | **RawHTTP** | **135 866** |
-| 3 | Hertz | 129 774 |
-| 4 | gnet | 122 228 |
-| 5 | net/http | 80 258 |
+| 1 | **RawHTTP** | **141 835** |
+| 2 | fasthttp | 132 769 |
+| 3 | gnet | 131 427 |
+| 4 | Hertz | 112 718 |
+| 5 | net/http | 69 777 |
 
 #### headers — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **149 336** |
-| 2 | fasthttp | 141 565 |
-| 3 | gnet | 136 038 |
-| 4 | Hertz | 133 335 |
-| 5 | net/http | 95 238 |
+| 1 | **RawHTTP** | **133 871** |
+| 2 | fasthttp | 119 144 |
+| 3 | gnet | 104 071 |
+| 4 | Hertz | 95 492 |
+| 5 | net/http | 89 328 |
 
 #### chunked (POST body echo) — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **148 796** |
-| 2 | gnet | 137 856 |
-| 3 | Hertz | 137 253 |
-| 4 | fasthttp | 132 873 |
-| 5 | net/http | 84 202 |
+| 1 | **RawHTTP** | **139 057** |
+| 2 | fasthttp | 130 533 |
+| 3 | gnet | 129 751 |
+| 4 | Hertz | 126 293 |
+| 5 | net/http | 76 300 |
 
 ### ServeConn microbench (`test/`)
 
@@ -207,7 +207,7 @@ cd test && go test -run 'Gate|Allocs' -v
 | Router | bring your own | `ServeMux` | bring your own | built-in | N/A (raw) |
 | Ctx model | `*Ctx` | `ResponseWriter`+`Request` | `RequestCtx` | `RequestContext` | custom |
 | Typical use | engine under apps | general Go | Fiber / custom | microservices | custom protocols |
-| This-host plaintext TCP (median snapshot) | **148.3k** | 75.5k | 128.0k | 63.7k | 112.1k |
+| This-host plaintext TCP (median snapshot) | **149.6k** | 76.3k | 126.2k | 109.0k | 115.0k |
 | This-host ServeConn plaintext | **256 ns**, 0 alloc | 10223 ns, 13 alloc | 789 ns, 0 alloc | — | — |
 
 Snapshot ranking is host-specific. Methodology and gate floors: [docs/performance.md](docs/performance.md).

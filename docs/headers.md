@@ -27,7 +27,7 @@ Unsafe names/values (CTL, CR/LF) are rejected → `ErrHeaderInvalid`.
 
 Lookups match header names case-insensitively (common indexed headers + scan). That is the only public behavior.
 
-There is **no** API to disable header-name normalizing (no `DisableHeaderNamesNormalizing` or equivalent). Do not assume fasthttp-style toggles exist here.
+There is **no** API to disable header-name normalizing (no `DisableHeaderNamesNormalizing` or equivalent).
 
 Path normalization can be relaxed via `Server.DisablePathNormalizing` / client equivalents (for proxy-style `..` paths) — that is unrelated to header names.
 

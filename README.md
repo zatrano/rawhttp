@@ -82,7 +82,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Middleware helpers (CORS, compress, rate limit, auth, …) — compose by wrapping `Handler`
 - Proxy dialers (HTTP CONNECT / SOCKS5), `TCPDialer` + DNS cache
 
-**Not included in v0.2.0:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
+**Not included in v0.2.1:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
 
 ## Documentation
 
@@ -107,7 +107,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 Measured on **2026-09-30**, **v0.2.1**, Go **1.25.13**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns/RPS are **host-specific** and vary with load; treat CI ServeConn floors as authoritative (see [docs/performance.md](docs/performance.md)).
 
-On ServeConn microbenches (median of 3 runs), RawHTTP was about **2.9×** fasthttp on plaintext hello with **0 allocs/op**. On same-host TCP multi-rival runs, RawHTTP, fasthttp, and gnet sit in the **same band**; ranking can flip (this run: fasthttp edged plaintext TCP by &lt;0.3%). Prefer measured tables below as a snapshot, not a guarantee of always finishing first.
+Numbers below are a **host-specific snapshot** (median of 3 runs where noted). Absolute RPS/ns vary with load; CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
 
 ### TCP multi-rival (`scripts/multibench`)
 
@@ -115,9 +115,9 @@ On ServeConn microbenches (median of 3 runs), RawHTTP was about **2.9×** fastht
 cd scripts/multibench && go run . -c 64 -d 3s -rounds 3
 ```
 
-Conditions: keep-alive HTTP/1.1; **same** `fasthttp.HostClient` for every server; c=64; 1s warmup + 3s timed; **3 rounds median** per server with **rotated start order**; scenarios `plaintext`, `json`, `headers`, `chunked`. Optional `-strict` is a **local** ranking check only (CI does not fail on it — see [performance](docs/performance.md)).
+Conditions: keep-alive HTTP/1.1; **same** `fasthttp.HostClient` for every server; c=64; 1s warmup + 3s timed; **3 rounds median** per server with **rotated start order**; scenarios `plaintext`, `json`, `headers`, `chunked`. Optional `-strict` is local-only (see [performance](docs/performance.md)); CI uses ServeConn gates.
 
-Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not a full HTTP stack). **Hertz** on Windows used `network library=standard`.
+Notes: Hertz on Windows used `network library=standard`. Multibench uses a shared `fasthttp.HostClient` for all servers.
 
 #### plaintext — median RPS (snapshot)
 
@@ -183,7 +183,7 @@ Absolute ns/op below are **host-specific** (median of 3 runs; re-measure on your
 | **RawHTTP** | **402** | 0 | **0** | — |
 | fasthttp | 750 | 0 | 0 | 1.87× |
 
-### CI performance contract (v0.2.0)
+### CI performance contract (v0.2.1)
 
 ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus scenario floors (see [docs/performance.md](docs/performance.md) for soft 0.85× / trim / soft-retry). Floors today:
 
@@ -191,7 +191,7 @@ ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus sc
 |------|-------|
 | ServeConn vs fasthttp plaintext / JSON / headers / chunked | ≥2.35× / ≥1.65× / ≥1.5× / ≥1.5× |
 | ServeConn vs net/http plaintext / JSON | ≥8.0× / ≥4.0× |
-| HostClient vs fasthttp | measured snapshot only (informational; not a CI floor) |
+| HostClient vs fasthttp | measured in tests; not a CI floor |
 | plaintext hello | **0 allocs/op** |
 
 ```bash
@@ -207,12 +207,10 @@ cd test && go test -run 'Gate|Allocs' -v
 | Router | bring your own | `ServeMux` | bring your own | built-in | N/A (raw) |
 | Ctx model | `*Ctx` | `ResponseWriter`+`Request` | `RequestCtx` | `RequestContext` | custom |
 | Typical use | engine under apps | general Go | Fiber / custom | microservices | custom protocols |
-| This-host plaintext TCP (median snapshot) | **138.4k** | 97.1k | **138.8k** | 132.7k | 136.7k† |
+| This-host plaintext TCP (median snapshot) | **138.4k** | 97.1k | **138.8k** | 132.7k | 136.7k |
 | This-host ServeConn plaintext | **217 ns**, 0 alloc | 6801 ns, 13 alloc | 634 ns, 0 alloc | — | — |
 
-† gnet multibench is a minimal framer, not full HTTP parity. Snapshot ranking is host-specific.
-
-RawHTTP is **not** a fasthttp fork or wrapper. Full tables and gate mechanics: [docs/performance.md](docs/performance.md).
+Snapshot ranking is host-specific. Methodology and gate floors: [docs/performance.md](docs/performance.md).
 ## Client
 
 ```go

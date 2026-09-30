@@ -16,7 +16,7 @@ Your app / framework     ← routing, sessions, DB, templates, …
 | Routing | Manual / optional | Usually owns routes |
 | Business logic | No | Yes |
 
-RawHTTP is not a fasthttp fork or wrapper. Frameworks may sit on top of it the same way Fiber sits on fasthttp — that is a structural analogy only.
+RawHTTP is an independent HTTP/1.1 engine. Application frameworks can sit above it for routing and business logic.
 
 
 ## Core objects

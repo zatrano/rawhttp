@@ -49,6 +49,8 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 go get github.com/zatrano/rawhttp@v0.1.0
 ```
 
+Testler ayrı modülde (`test/`); çalıştırmak için: `cd test && go test ./...`
+
 ## Quick start
 
 ```go

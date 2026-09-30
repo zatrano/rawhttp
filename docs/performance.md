@@ -21,7 +21,8 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 | Field | Value |
 |-------|--------|
-| Date | 2026-09-29 |
+| Date | 2026-09-30 |
+| Tag | v0.2.0 |
 | Go | 1.25.13 windows/amd64 |
 | GOMAXPROCS | 8 |
 | CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
@@ -31,22 +32,21 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 | Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
-| plaintext | **159 183** | 153 225 | 146 162 | 144 761 | 105 397 |
-| json | **155 373** | 147 584 | 144 903 | 141 248 | 87 563 |
-| headers | **154 753** | 147 980 | 142 904 | 143 457 | 101 655 |
-| chunked | **155 058** | 129 449 | 124 015 | 124 150 | 66 454 |
+| plaintext | 138 416 | **138 809** | 136 687 | 132 666 | 97 111 |
+| json | **146 810** | 129 902 | 135 975 | 133 248 | 80 363 |
+| headers | **146 597** | 137 797 | 135 601 | 119 325 | 70 868 |
+| chunked | **144 498** | 135 338 | 131 115 | 133 532 | 75 795 |
 
-gnet = minimal keep-alive framer (waits for body bytes; not full HTTP). Hertz on Windows used `standard` network.
+gnet = minimal keep-alive framer (waits for body bytes; not full HTTP). Hertz on Windows used `standard` network. Plaintext TCP ranking flipped by &lt;0.3% in this run — expected host noise.
 
-### ServeConn microbench
+### ServeConn microbench (median of 3× `-count=3`, `-benchtime=2s`)
 
 | Bench | RawHTTP | fasthttp | net/http |
 |-------|--------:|---------:|---------:|
-| Plaintext ns/op (allocs) | **203.3 (0)** | 548.2 (0) | 2591 (13) |
-| JSON POST ns/op (allocs) | **453.8 (0)** | 936.2 (0) | — |
+| Plaintext ns/op (allocs) | **217 (0)** | 634 (0) | 6801 (13) |
+| JSON POST ns/op (allocs) | **402 (0)** | 750 (0) | — |
 
-Typical plaintext vs fasthttp band on ServeConn: about **2.5–3×** with **0 allocs** (exact ratio is host-specific; CI floor is separate).
-
+Typical plaintext vs fasthttp band on ServeConn: about **2.9×** with **0 allocs** (exact ratio is host-specific; CI floor is separate).
 ## CI ServeConn gate mechanics
 
 Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):

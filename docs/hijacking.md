@@ -63,8 +63,7 @@ When `KeepHijackedConns` is true, the hijacked conn stays open for the caller to
 
 Typical uses of the low-level connection:
 
-- custom binary protocols after an HTTP request
-- hand-rolled upgrade-style protocols implemented **outside** RawHTTP
+- custom binary protocols after a normal HTTP request (**without** `Upgrade`)
 - debugging / connection inspection
 
 ## Hijack ≠ WebSocket
@@ -75,6 +74,8 @@ Hijack != WebSocket implementation
 
 RawHTTP provides **only** low-level connection access via `Hijack`. There is **no** WebSocket helper, handshake API, or frame codec in this package.
 
-If you need WebSockets, use a separate library on top of the hijacked `net.Conn` (and handle buffering / leftover yourself).
+**Important:** on the default HTTP path RawHTTP **rejects** requests that carry `Upgrade` or a `Connection: upgrade` token with **400 Bad Request** before the handler runs. A standards-shaped WebSocket handshake (`GET` + `Upgrade: websocket` + `Connection: Upgrade` + `Sec-WebSocket-*`) therefore **never reaches `Hijack`**.
 
-On the normal HTTP path RawHTTP rejects `Connection: upgrade` for security; that is not a WebSocket stack.
+`Hijack` is for **upgrade-free** custom protocols (or traffic already terminated/normalized upstream). Do not document or assume “WebSocket = Hijack + external library” against RawHTTP’s default parser: the handshake is rejected first.
+
+If you need WebSockets in production, terminate/upgrade at a reverse proxy or use a stack that accepts the Upgrade handshake; RawHTTP’s Hijack path alone is not a WebSocket server.

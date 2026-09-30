@@ -32,7 +32,7 @@ It is **not** claimed to be:
 9. `SetHeader` / `SetContentType` block CR/LF / CTL; client Method/Host/URI similarly validated
 10. Malformed requests answered with 400 (unsupported Expect → 417)
 11. Only HTTP/1.0 and HTTP/1.1; reject absolute-form and scheme-relative (`//`) targets; `Ctx.Redirect` also rejects scheme-relative Location; `SameSite=None` forces `Secure`
-12. Reject CTL in header values; reject `Connection: upgrade` / `Upgrade`
+12. Reject CTL in header values; reject `Connection: upgrade` / `Upgrade` (**400** before handler; no WebSocket handshake path by default)
 13. Limit chunk-extension length; reject chunk-size trailing garbage; validate trailers
 14. Reject smuggling-sensitive trailers (Host/CL/TE/Connection/Upgrade/Trailer)
 15. Reject TRACE and CONNECT methods
@@ -79,7 +79,7 @@ Status key: **Mitigated** (corpus + parser rule) · **Partial** (common forms re
 | 14 | Smuggling-sensitive trailers | Mitigated | Host/CL/TE/Connection/… |
 | 15 | Too many chunk frames | Mitigated | `MaxChunks` |
 | 16 | GET/HEAD with body / Expect:100 | Mitigated | Reject |
-| 17 | `Connection: upgrade` / `Upgrade` | Mitigated | Reject (WS out of scope) |
+| 17 | `Connection: upgrade` / `Upgrade` | Mitigated | **400** before handler; standard WebSocket handshake never reaches `Hijack` |
 | 18 | TRACE / CONNECT | Mitigated | Reject |
 | 19 | Path `..` / `%2e` / `%00` / `#` / `\` / CTL | Mitigated | Reject literal and encoded dots |
 | 20 | Response splitting via `SetHeader` | Mitigated | CR/LF/CTL blocked |
@@ -96,12 +96,26 @@ cd test && go test -count=1 -run '^TestSecurity' -v
 cd test && go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
 ```
 
+## Stricter than `net/http` (differential notes)
+
+On a same-input differential corpus (RawHTTP `ServeConn` vs `net/http` server), RawHTTP was **stricter** (reject / non-200 while `net/http` accepted) for cases including:
+
+- `Content-Length` + `Transfer-Encoding: chunked` together
+- Obs-fold header continuation
+- Bare LF (non-CRLF) request framing
+- Absolute-form request targets
+- Empty `Host`
+- `%2e` path segments
+- `Upgrade` / `Connection: upgrade` (RawHTTP **400**; `net/http` may still invoke the handler)
+
+No corpus case in that audit run showed RawHTTP **looser** than `net/http` on the compared accept/reject decision. Prefer a reviewed reverse proxy when front-end and RawHTTP parsers must agree under attack traffic.
+
 ## Known gaps / operator guidance
 
 - Prefer TLS termination and a reverse proxy (or mature peer) when facing untrusted clients until the parser has more field use
 - Set explicit `MaxRequestBodySize` for your threat model
 - Do not put untrusted data into response headers without validation (library already rejects CR/LF/CTL)
-- Absolute-form / CONNECT / upgrade protocols are out of scope
+- Absolute-form / CONNECT are rejected; **upgrade / WebSocket handshakes are rejected** (400) — `Hijack` is not a WebSocket entry point under default settings
 - Reject GET/HEAD with a body; reject CTL/`\` in request-target; reject duplicate TE
 - `ReadHeaderTimeout`, connection/request counters, `Ctx.IsTLS`
 - Run short fuzz in CI; longer local fuzz before releases (`-fuzztime=5m`+)
@@ -129,7 +143,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR/tag:
 4. **style** — gofmt, go vet, staticcheck, golangci-lint
 5. **vuln** — govulncheck
 6. **build** — go build + go mod tidy
-7. **gate** — fasthttp must lose (never-slower; ≥3× plaintext, ≥1.65× JSON, ≥1.5× headers/chunked; 0-alloc hello)
+7. **gate** — ServeConn rival floors + never-slower trimmed rounds + 0-alloc hello (see `docs/performance.md`)
 8. **fuzz** — short `FuzzServeConn` / request-line / headers / chunked runs
 
 `TestSecurityAttackCorpus` attempts request smuggling, Host/path abuse,

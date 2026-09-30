@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -96,6 +97,32 @@ func TestAllowUpgrade_DefaultStillRejects(t *testing.T) {
 		Handler: func(ctx *rawhttp.Ctx) {},
 	}
 	assertUpgrade400(t, srv, wsHandshake("/ws", key))
+}
+
+// stickyConnectionUpgradeRaw is the FuzzUpgradePredicate input that found
+// upgradeWanted being cleared by a later Connection header without "upgrade".
+const stickyConnectionUpgradeRaw = "0 / HTTP/1.0\r\n0:\r\nConneCtion:UpgrAde\r\nU:\r\nConneCtion:0000000\r\n0:\r\n0:\r\n0:\r\n\r\n"
+
+// TestConnectionUpgradeTokenSticky: a later Connection without the upgrade
+// token must not erase an earlier one — otherwise AllowUpgrade validation is
+// skipped and the handler sees an upgrade-shaped request.
+func TestConnectionUpgradeTokenSticky(t *testing.T) {
+	for _, allow := range []bool{false, true} {
+		allow := allow
+		t.Run(fmt.Sprintf("AllowUpgrade=%v", allow), func(t *testing.T) {
+			srv := &rawhttp.Server{
+				ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1,
+				AllowUpgrade: allow,
+			}
+			assertUpgrade400(t, srv, stickyConnectionUpgradeRaw)
+		})
+	}
+	// Clearer dual-Connection shape (HTTP/1.1 + Host).
+	srv := &rawhttp.Server{
+		ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1,
+		AllowUpgrade: true,
+	}
+	assertUpgrade400(t, srv, "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nConnection: close\r\n\r\n")
 }
 
 func TestAllowUpgrade_BadKeyLength400(t *testing.T) {

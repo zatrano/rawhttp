@@ -342,10 +342,10 @@ func TestAllowUpgrade_HijackClearsDeadlines(t *testing.T) {
 	defer ln.Close()
 
 	srv := &rawhttp.Server{
-		ReadTimeout:  200 * time.Millisecond,
-		WriteTimeout: 200 * time.Millisecond,
-		IdleTimeout:  200 * time.Millisecond,
-		AllowUpgrade: true,
+		ReadTimeout:       200 * time.Millisecond,
+		WriteTimeout:      200 * time.Millisecond,
+		IdleTimeout:       200 * time.Millisecond,
+		AllowUpgrade:      true,
 		KeepHijackedConns: true,
 		Handler: func(ctx *rawhttp.Ctx) {
 			conn, leftover, err := ctx.Hijack()

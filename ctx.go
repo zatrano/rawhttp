@@ -26,11 +26,11 @@ type Ctx struct {
 	chunked         bool
 	sawHost         bool
 	expectContinue  bool
-	clSet           bool // Content-Length seen at least once
-	head            bool // HEAD method
-	forceClose      bool // SetConnectionClose
-	respChunked     bool // Transfer-Encoding: chunked response
-	upgradeWanted   bool // Connection contained upgrade token
+	clSet           bool   // Content-Length seen at least once
+	head            bool   // HEAD method
+	forceClose      bool   // SetConnectionClose
+	respChunked     bool   // Transfer-Encoding: chunked response
+	upgradeWanted   bool   // Connection contained upgrade token
 	upgradeProto    []byte // raw Upgrade header value (may alias buffer)
 
 	headerBlock []byte

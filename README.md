@@ -189,7 +189,7 @@ ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus sc
 |------|-------|
 | ServeConn vs fasthttp plaintext / JSON / headers / chunked | ≥2.35× / ≥1.65× / ≥1.5× / ≥1.5× |
 | ServeConn vs net/http plaintext / JSON | ≥8.0× / ≥4.0× |
-| HostClient vs fasthttp | ≥1.05× (informational) |
+| HostClient vs fasthttp | measured snapshot only (informational; not a CI floor) |
 | plaintext hello | **0 allocs/op** |
 
 ```bash

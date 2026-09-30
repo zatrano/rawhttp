@@ -52,6 +52,7 @@ const (
 )
 
 func TestGate_FasterThanFastHTTP_Plaintext(t *testing.T) {
+	skipIfPoison(t)
 	data := buildRequests(gateRequests)
 	raw := func(d []byte) int64 { return timeServeRaw(d) }
 	fast := func(d []byte) int64 { return timeServeFast(d) }
@@ -59,6 +60,7 @@ func TestGate_FasterThanFastHTTP_Plaintext(t *testing.T) {
 }
 
 func TestGate_FasterThanFastHTTP_JSONPost(t *testing.T) {
+	skipIfPoison(t)
 	payload := []byte(`{"msg":"hello"}`)
 	one := "POST /api HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n" + string(payload)
 	data := bytes.Repeat([]byte(one), gateRequests)
@@ -68,6 +70,7 @@ func TestGate_FasterThanFastHTTP_JSONPost(t *testing.T) {
 }
 
 func TestGate_FasterThanFastHTTP_HeaderPeek(t *testing.T) {
+	skipIfPoison(t)
 	data := buildRequests(gateRequests)
 	raw := func(d []byte) int64 {
 		return timeServe(d, &rawhttp.Server{
@@ -92,6 +95,7 @@ func TestGate_FasterThanFastHTTP_HeaderPeek(t *testing.T) {
 }
 
 func TestGate_FasterThanFastHTTP_ChunkedEcho(t *testing.T) {
+	skipIfPoison(t)
 	one := "POST /c HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
 	data := bytes.Repeat([]byte(one), gateRequests)
 	raw := func(d []byte) int64 {
@@ -111,6 +115,7 @@ func TestGate_FasterThanFastHTTP_ChunkedEcho(t *testing.T) {
 }
 
 func TestGate_FasterThanNetHTTP_Plaintext(t *testing.T) {
+	skipIfPoison(t)
 	data := buildRequests(gateRequests)
 	raw := func(d []byte) int64 { return timeServeRaw(d) }
 	netH := func(d []byte) int64 { return timeServeNet(d) }
@@ -118,6 +123,7 @@ func TestGate_FasterThanNetHTTP_Plaintext(t *testing.T) {
 }
 
 func TestGate_FasterThanNetHTTP_JSONPost(t *testing.T) {
+	skipIfPoison(t)
 	payload := []byte(`{"msg":"hello"}`)
 	one := "POST /api HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n" + string(payload)
 	data := bytes.Repeat([]byte(one), gateRequests)
@@ -290,6 +296,7 @@ func timeServeNetJSON(data []byte) int64 {
 }
 
 func TestGate_ClientFasterThanFastHTTP(t *testing.T) {
+	skipIfPoison(t)
 	const (
 		n      = 20000
 		rounds = 11

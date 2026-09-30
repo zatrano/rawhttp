@@ -179,5 +179,5 @@ See [errors.md](errors.md).
 ## Thread-safety
 
 - `Server` methods: do not mutate config after Serve starts.
-- `Ctx`: request-scoped; do not retain buffer slices after the handler returns.
+- `Ctx`: request-scoped; do not retain buffer slices after the handler returns. Debug: `-tags rawhttp_poison` fills retained request bytes with `0xDE` after the handler (see [concepts](concepts.md)).
 - Pooled client `Request` / `Response`: exclusive until released.

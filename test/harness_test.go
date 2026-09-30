@@ -6,8 +6,18 @@ import (
 	"net"
 	"os"
 	"sync"
+	"testing"
 	"time"
+
+	"github.com/zatrano/rawhttp"
 )
+
+func skipIfPoison(t testing.TB) {
+	t.Helper()
+	if rawhttp.PoisonBuildEnabled() {
+		t.Skip("rawhttp_poison: skip gates/benches (0xDE fill skews ns/op and alloc contracts)")
+	}
+}
 
 type fakeConn struct {
 	r             *bytes.Reader

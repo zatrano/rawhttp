@@ -1001,6 +1001,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				return drainErr
 			}
 		}
+		poisonPinnedBuffer(cr)
 		cr.release()
 		// Keep remaining bytes at front so the next request has a contiguous buffer.
 		if cr.r > len(cr.buf)/2 {
@@ -1021,6 +1022,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if err := writeResponse(conn, ctx, closeConn); err != nil {
 			return err
 		}
+		poisonCtxRequestSlices(ctx)
 		if reduceMem {
 			if cap(ctx.reqBody) > 4096 {
 				ctx.reqBody = nil

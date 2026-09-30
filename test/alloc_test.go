@@ -9,6 +9,7 @@ import (
 // Allocation contract: plaintext keep-alive hello must stay at 0 allocs/op
 // across a single ServeConn (same model as BenchmarkRawHTTP_Plaintext).
 func TestAllocs_PlaintextHello(t *testing.T) {
+	skipIfPoison(t)
 	res := testing.Benchmark(func(b *testing.B) {
 		data := buildRequests(b.N)
 		fc := newDiscardConn(data)
@@ -28,6 +29,7 @@ func TestAllocs_PlaintextHello(t *testing.T) {
 }
 
 func TestAllocs_JSONPost(t *testing.T) {
+	skipIfPoison(t)
 	res := testing.Benchmark(func(b *testing.B) {
 		payload := []byte(`{"msg":"hello"}`)
 		one := "POST /api HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n" + string(payload)

@@ -46,6 +46,7 @@ func (l *oneConnListener) Close() error   { return nil }
 func (l *oneConnListener) Addr() net.Addr { return dummyAddr{} }
 
 func BenchmarkRawHTTP_Plaintext(b *testing.B) {
+	skipIfPoison(b)
 	data := buildRequests(b.N)
 	fc := newDiscardConn(data)
 	srv := &rawhttp.Server{
@@ -60,6 +61,7 @@ func BenchmarkRawHTTP_Plaintext(b *testing.B) {
 }
 
 func BenchmarkFastHTTP_Plaintext(b *testing.B) {
+	skipIfPoison(b)
 	data := buildRequests(b.N)
 	fc := newDiscardConn(data)
 	srv := &fasthttp.Server{
@@ -73,6 +75,7 @@ func BenchmarkFastHTTP_Plaintext(b *testing.B) {
 }
 
 func BenchmarkNetHTTP_Plaintext(b *testing.B) {
+	skipIfPoison(b)
 	data := buildRequests(b.N)
 	fc := newDiscardConn(data)
 	ln := &oneConnListener{conn: fc}
@@ -92,6 +95,7 @@ func BenchmarkNetHTTP_Plaintext(b *testing.B) {
 }
 
 func BenchmarkRawHTTP_JSONPost(b *testing.B) {
+	skipIfPoison(b)
 	payload := []byte(`{"msg":"hello"}`)
 	one := "POST /api HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n" + string(payload)
 	var buf bytes.Buffer
@@ -116,6 +120,7 @@ func BenchmarkRawHTTP_JSONPost(b *testing.B) {
 }
 
 func BenchmarkFastHTTP_JSONPost(b *testing.B) {
+	skipIfPoison(b)
 	payload := []byte(`{"msg":"hello"}`)
 	one := "POST /api HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n" + string(payload)
 	var buf bytes.Buffer
@@ -137,6 +142,7 @@ func BenchmarkFastHTTP_JSONPost(b *testing.B) {
 }
 
 func BenchmarkRawHTTP_HeaderPeek(b *testing.B) {
+	skipIfPoison(b)
 	data := buildRequests(b.N)
 	fc := newDiscardConn(data)
 	srv := &rawhttp.Server{
@@ -156,6 +162,7 @@ func BenchmarkRawHTTP_HeaderPeek(b *testing.B) {
 }
 
 func BenchmarkRawHTTP_ChunkedEcho(b *testing.B) {
+	skipIfPoison(b)
 	one := "POST /c HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
 	var buf bytes.Buffer
 	buf.Grow(len(one) * b.N)

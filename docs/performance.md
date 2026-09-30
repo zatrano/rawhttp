@@ -62,7 +62,7 @@ Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):
 |------|------------------------|
 | ServeConn vs fasthttp | plaintext ≥2.35×, JSON ≥1.65×, headers/chunked ≥1.5× |
 | ServeConn vs net/http | plaintext ≥8.0×, JSON ≥4.0× |
-| HostClient vs fasthttp | ≥1.05× (informational — not CI-blocking) |
+| HostClient vs fasthttp | measured, not enforced (informational log only) |
 | Allocs plaintext hello | 0 |
 
 ### Floor calibration (2026-09-30, Windows / i5-1135G7, 10× `TestGate_*`)

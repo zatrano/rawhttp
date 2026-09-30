@@ -1,6 +1,6 @@
 <div align="center">
 
-# rawhttp
+# RawHTTP
 
 Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
@@ -107,7 +107,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 Measured on **2026-09-29**, **v0.1.0**, Go **1.25.13**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns/RPS are **host-specific** and vary with load; treat CI ServeConn floors as authoritative (see [docs/performance.md](docs/performance.md)).
 
-On ServeConn microbenches, rawhttp is typically about **2.5–3×** fasthttp on plaintext hello with **0 allocs/op**. On same-host TCP multi-rival runs, rawhttp, fasthttp, and gnet often sit in the **same band**; ranking can change between runs. Prefer measured tables below as a snapshot, not a guarantee of always finishing first.
+On ServeConn microbenches, RawHTTP is typically about **2.5–3×** fasthttp on plaintext hello with **0 allocs/op**. On same-host TCP multi-rival runs, RawHTTP, fasthttp, and gnet often sit in the **same band**; ranking can change between runs. Prefer measured tables below as a snapshot, not a guarantee of always finishing first.
 
 ### TCP multi-rival (`scripts/multibench`)
 
@@ -123,7 +123,7 @@ Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not 
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **rawhttp** | **159 183** |
+| 1 | **RawHTTP** | **159 183** |
 | 2 | fasthttp | 153 225 |
 | 3 | gnet | 146 162 |
 | 4 | Hertz | 144 761 |
@@ -133,7 +133,7 @@ Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not 
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **rawhttp** | **155 373** |
+| 1 | **RawHTTP** | **155 373** |
 | 2 | fasthttp | 147 584 |
 | 3 | gnet | 144 903 |
 | 4 | Hertz | 141 248 |
@@ -143,7 +143,7 @@ Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not 
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **rawhttp** | **154 753** |
+| 1 | **RawHTTP** | **154 753** |
 | 2 | fasthttp | 147 980 |
 | 3 | Hertz | 143 457 |
 | 4 | gnet | 142 904 |
@@ -153,7 +153,7 @@ Notes: **gnet** = minimal keep-alive framer (waits for Content-Length body; not 
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **rawhttp** | **155 058** |
+| 1 | **RawHTTP** | **155 058** |
 | 2 | fasthttp | 129 449 |
 | 3 | Hertz | 124 150 |
 | 4 | gnet | 124 015 |
@@ -170,17 +170,17 @@ Absolute ns/op below are **host-specific** (re-measure on your machine).
 
 #### Plaintext hello
 
-| Server | ns/op | B/op | allocs/op | vs rawhttp |
+| Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **rawhttp** | **203.3** | 0 | **0** | — |
+| **RawHTTP** | **203.3** | 0 | **0** | — |
 | fasthttp | 548.2 | 0 | 0 | 2.70× |
 | net/http | 2591 | 1333 | 13 | 12.7× |
 
 #### JSON POST
 
-| Server | ns/op | B/op | allocs/op | vs rawhttp |
+| Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **rawhttp** | **453.8** | 0 | **0** | — |
+| **RawHTTP** | **453.8** | 0 | **0** | — |
 | fasthttp | 936.2 | 0 | 0 | 2.06× |
 
 ### CI performance contract (v0.1.0)
@@ -200,7 +200,7 @@ cd test && go test -run 'Gate|Allocs' -v
 
 ## vs net/http / fasthttp / Hertz / gnet
 
-| | rawhttp | net/http | fasthttp | Hertz | gnet |
+| | RawHTTP | net/http | fasthttp | Hertz | gnet |
 |--|---------|----------|----------|-------|------|
 | Role | HTTP/1.1 engine | stdlib HTTP | HTTP engine | CloudWeGo HTTP | Event-loop net framework |
 | Deps | none | stdlib | compress libs | larger tree | event-loop |

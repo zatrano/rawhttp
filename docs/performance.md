@@ -15,7 +15,7 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 - **CI ServeConn floors are authoritative** for regressions (`test/gate_test.go`).
 - README / tables below are **host-specific snapshots**; absolute ns and TCP RPS move with CPU load and GOMAXPROCS.
-- On same-host TCP multi-rival runs, rawhttp / fasthttp / gnet often share a band; run-to-run ranking can flip. Do not treat “always #1 on every TCP scenario” as a product guarantee.
+- On same-host TCP multi-rival runs, RawHTTP / fasthttp / gnet often share a band; run-to-run ranking can flip. Do not treat “always #1 on every TCP scenario” as a product guarantee.
 
 ## Measured results (snapshot)
 
@@ -29,7 +29,7 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 ### Median snapshot RPS (one host)
 
-| Scenario | rawhttp | fasthttp | gnet | Hertz | net/http |
+| Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
 | plaintext | **159 183** | 153 225 | 146 162 | 144 761 | 105 397 |
 | json | **155 373** | 147 584 | 144 903 | 141 248 | 87 563 |
@@ -40,7 +40,7 @@ gnet = minimal keep-alive framer (waits for body bytes; not full HTTP). Hertz on
 
 ### ServeConn microbench
 
-| Bench | rawhttp | fasthttp | net/http |
+| Bench | RawHTTP | fasthttp | net/http |
 |-------|--------:|---------:|---------:|
 | Plaintext ns/op (allocs) | **203.3 (0)** | 548.2 (0) | 2591 (13) |
 | JSON POST ns/op (allocs) | **453.8 (0)** | 936.2 (0) | — |
@@ -51,7 +51,7 @@ Typical plaintext vs fasthttp band on ServeConn: about **2.5–3×** with **0 al
 
 Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):
 
-1. Warmup, then **11** timed rounds (order of rawhttp vs rival alternates).
+1. Warmup, then **11** timed rounds (order of RawHTTP vs rival alternates).
 2. Each round ratio = `rival_ns / rawhttp_ns`. Soft per-round floor: ratio ≥ **0.85×** (a single noisy round may be &lt; 1.00×).
 3. Sort ratios; **trim** the 2 lowest and 2 highest.
 4. Every **trimmed** ratio must be ≥ **1.00×** (“never slower” after trim).
@@ -92,7 +92,7 @@ No per-round soft 0.85× check on the client gate; no run failed for “median n
 
 **Client retest** at floor 1.05 (10×): still **1/10 FAIL** on trimmed ≥1.00× (0.97× in trimmed window). Floor not lowered further; `TestGate_ClientFasterThanFastHTTP` is now **informational** (`t.Log` only) because pipe-backed client noise dominates the thin margin.
 
-Optional `scripts/multibench -strict` is a **local-only** ranking helper (exits 2 if rawhttp is not #1 / pairwise &lt; 1.00×). CI runs multibench **without** `-strict` so ranking stays informational; host noise can flip TCP order. Treat CI ServeConn gates (`TestGate_*`) as the regression contract.
+Optional `scripts/multibench -strict` is a **local-only** ranking helper (exits 2 if RawHTTP is not #1 / pairwise &lt; 1.00×). CI runs multibench **without** `-strict` so ranking stays informational; host noise can flip TCP order. Treat CI ServeConn gates (`TestGate_*`) as the regression contract.
 
 ```bash
 cd test && go test -run 'Gate|Allocs' -count=1 -v

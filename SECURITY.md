@@ -10,7 +10,7 @@ Report issues via GitHub. Do not open public issues for unfixed zero-days withou
 
 ## Guarantees (honest)
 
-rawhttp **v0.1** is an experimental high-performance HTTP/1.1 server and client. It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
+RawHTTP **v0.1** is an experimental high-performance HTTP/1.1 server and client. It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
 
 It is **not** claimed to be:
 
@@ -86,7 +86,7 @@ Status key: **Mitigated** (corpus + parser rule) · **Partial** (common forms re
 | 21 | Header bomb (count / size) | Mitigated | `MaxHeaders` / `MaxHeaderBytes` → 431 |
 | 22 | Pipelined request desync | Partial | Keep-alive pipelining OK by default; `DisablePipelining` closes on leftover |
 | 23 | HTTP/2 downgrade / H2c preface | Out of scope | HTTP/1.1 only |
-| 24 | Front-end ↔ rawhttp parser disagreement | Partial | Prefer TLS + reviewed reverse proxy; `%2e`, identical CL, ASCII Host |
+| 24 | Front-end ↔ RawHTTP parser disagreement | Partial | Prefer TLS + reviewed reverse proxy; `%2e`, identical CL, ASCII Host |
 | 25 | Client response CL/TE confusion | Mitigated | Rejects CL+TE, duplicate TE, non-chunked TE, duplicate CL; forbidden trailers |
 
 Re-run the living corpus after parser changes:
@@ -147,5 +147,5 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR/tag:
 8. **fuzz** — short `FuzzServeConn` / request-line / headers / chunked runs
 
 `TestSecurityAttackCorpus` attempts request smuggling, Host/path abuse,
-chunk/trailer attacks, response splitting, and header bombs — rawhttp must reject them
+chunk/trailer attacks, response splitting, and header bombs — RawHTTP must reject them
 without invoking the handler.

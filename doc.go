@@ -19,7 +19,7 @@
 // Concurrency 262144. Client MaxResponseHeaderBytes 64KiB.
 // See README for limitations.
 //
-// Performance contract: rawhttp must never be slower than fasthttp on timed
+// Performance contract: RawHTTP must never be slower than fasthttp on timed
 // ServeConn gates, and must stay ≥2.35× on plaintext / ≥1.65× on JSON
 // (enforced by test/TestGate_FasterThanFastHTTP_*) with 0 allocs/op on the
 // hello path (TestAllocs_PlaintextHello). HostClient vs fasthttp timing is

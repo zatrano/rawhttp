@@ -29,3 +29,7 @@ Thumbs.db
 
 # Go fuzz cache
 **/testdata/fuzz/
+
+# Cursor IDE (local)
+.cursor/
+

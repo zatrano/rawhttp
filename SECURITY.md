@@ -4,14 +4,16 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | yes (best-effort) |
+| 0.2.x   | yes (GA for application embedding) |
 | 0.1.x   | superseded |
 
 Report issues via GitHub. Do not open public issues for unfixed zero-days without coordinated disclosure.
 
-## Guarantees (honest)
+## Status (GA readiness)
 
-RawHTTP **v0.2** is an experimental high-performance HTTP/1.1 server and client. It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
+RawHTTP **v0.2.2** is **Generally Available** as the HTTP/1.1 transport for application servers (ZATRANO V3 and similar embedders). Tag remains on the **0.2.x** line: the public Go API may still evolve with semver-minor care; there is no separate `v1.0.0` tag required for V3 cutover.
+
+It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
 
 It is **not** claimed to be:
 
@@ -19,6 +21,9 @@ It is **not** claimed to be:
 - Immune to every HTTP request smuggling technique
 - Suitable as a public-facing reverse proxy without review
 
+## Guarantees (honest)
+
+Prior wording called v0.2 “experimental.” That label is retired for **application embedding**. The “not claimed” list above still applies.
 ## Verifiable controls
 
 These are repository checks, not third-party certification claims:

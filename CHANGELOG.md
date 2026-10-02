@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.3 - 2026-10-02
+
+### Documentation
+
+- Promote status to **GA for application embedding** (ZATRANO V3 transport). Tag line remains 0.2.x; reverse-proxy claims unchanged. SECURITY / README / production guide updated.
+
 ## v0.2.2 - 2026-10-02
 
 ### Changed

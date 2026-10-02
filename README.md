@@ -31,7 +31,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.2.2 (experimental).** Suitable for controlled deployments and benchmarking. Read [SECURITY.md](SECURITY.md) before public exposure.
+**Status: v0.2.2 (GA for application embedding).** Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
 
 ```text
 Your app / framework

@@ -42,11 +42,11 @@ func (c *Ctx) Hijacked() bool { return c.hijacked }
 
 // HijackSetNoResponse controls whether the server would write a response after
 // the handler returns when Hijack is used. rawhttp never writes after Hijack;
-// this exists for fasthttp API parity.
+// this exists for API compatibility.
 func (c *Ctx) HijackSetNoResponse(noResponse bool) { c.hijackNoResp = noResponse }
 
 // TimeoutError marks the response as a timeout (503) and ignores further
-// writes. Use when retaining Ctx references past handler return (fasthttp pattern).
+// writes. Use when retaining Ctx references past handler return (retain-after-handler pattern).
 func (c *Ctx) TimeoutError(msg string) {
 	if msg == "" {
 		msg = "Timeout"

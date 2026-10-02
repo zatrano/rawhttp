@@ -53,7 +53,7 @@ When `KeepHijackedConns` is true, the hijacked conn stays open for the caller to
 
 ## HijackSetNoResponse
 
-`HijackSetNoResponse` exists for fasthttp API parity. RawHTTP **never** writes an HTTP response after Hijack regardless of this flag.
+`HijackSetNoResponse` exists for API compatibility. RawHTTP **never** writes an HTTP response after Hijack regardless of this flag.
 
 ## TimeoutError / TimeoutHandler
 

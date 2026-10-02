@@ -19,10 +19,10 @@
 // Concurrency 262144. Client MaxResponseHeaderBytes 64KiB.
 // See README for limitations.
 //
-// Performance contract: RawHTTP must never be slower than fasthttp on timed
+// Performance contract: RawHTTP must never be slower than the comparison ServeConn floors on timed
 // ServeConn gates, and must stay ≥2.35× on plaintext / ≥1.65× on JSON
-// (enforced by test/TestGate_FasterThanFastHTTP_*) with 0 allocs/op on the
-// hello path (TestAllocs_PlaintextHello). HostClient vs fasthttp timing is
+// (enforced by test ServeConn comparison gates) with 0 allocs/op on the
+// hello path (TestAllocs_PlaintextHello). HostClient vs comparison-engine timing is
 // measured for information only (not a protected floor; see test/gate_test.go).
 package rawhttp
 

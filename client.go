@@ -27,7 +27,7 @@ type RetryIfErrFunc func(req *Request, attempts int, err error) (resetTimeout bo
 
 const (
 	defaultClientDialTimeout = 3 * time.Second
-	// Read/Write timeout 0 means unlimited (fasthttp HostClient parity).
+	// Read/Write timeout 0 means unlimited (HostClient timeout convention).
 	defaultMaxConnsPerHost        = 512
 	defaultMaxIdleConnDuration    = 10 * time.Second
 	defaultMaxResponseBodySize    = 4 << 20
@@ -72,7 +72,7 @@ func (r *Request) Reset() {
 // no explicit DoTimeout/DoDeadline is given. Zero means no per-request timeout.
 func (r *Request) SetTimeout(d time.Duration) { r.timeout = d }
 
-// GetTimeout returns the per-request timeout (fasthttp-compatible name).
+// GetTimeout returns the per-request timeout (compatibility name).
 func (r *Request) GetTimeout() time.Duration { return r.timeout }
 
 // SetBody sets the request body (copied by reference; caller must not mutate

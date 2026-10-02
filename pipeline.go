@@ -9,7 +9,7 @@ import (
 )
 
 // PipelineClient is an HTTP/1.1 client optimized for a single high-throughput host.
-// It shares HostClient connection pooling with a pending-request cap (fasthttp parity).
+// It shares HostClient connection pooling with a pending-request cap (common pool/pipeline convention).
 type PipelineClient struct {
 	Addr                     string
 	IsTLS                    bool

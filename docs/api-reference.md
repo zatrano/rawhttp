@@ -72,7 +72,7 @@ Notable methods:
 |--------|---------|
 | `Hijack` | `(conn net.Conn, leftover []byte, err error)` — take connection |
 | `Hijacked` | whether Hijack was called |
-| `HijackSetNoResponse` | fasthttp API parity; RawHTTP never writes after Hijack |
+| `HijackSetNoResponse` | API compatibility; RawHTTP never writes after Hijack |
 | `TimeoutError` | mark 503 timeout (retained-Ctx pattern) |
 | `URI` | `*URI` view of the request target |
 | `QueryArgs` / `PostArgs` | `QueryArgs` views |

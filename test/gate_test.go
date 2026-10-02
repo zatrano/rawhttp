@@ -27,8 +27,8 @@ import (
 // fasthttp ServeConn floors:
 //  1. Never slower: trimmed rounds ≥1.0× (soft round floor 0.85×)
 //  2. Plaintext ≥2.35×, 0 allocs/op
-//     Rationale: this 10-run series min trimmed-median was 2.74×; prior audit
-//     runs saw 2.61×. Floor = ~10% below the lowest observation (≈2.35×).
+//     Rationale: this 10-run series min trimmed-median was 2.74×; prior
+//     measurements saw 2.61×. Floor = ~10% below the lowest observation (≈2.35×).
 //  3. JSON POST ≥1.65×
 //  4. Header peek + chunked ≥1.5×
 //  5. HostClient: informational only (pipe-backed client microbench is too

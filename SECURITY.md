@@ -18,7 +18,16 @@ It is **not** claimed to be:
 - A full RFC 9112 conformance suite
 - Immune to every HTTP request smuggling technique
 - Suitable as a public-facing reverse proxy without review
-- A security-audited replacement for `net/http`
+
+## Verifiable controls
+
+These are repository checks, not third-party certification claims:
+
+1. **Timeouts and limits** — default read/write/idle timeouts, concurrency cap, header/body size caps
+2. **Parser refusal matrix** — CL/TE conflict, duplicate Host/CL, absolute-form, Upgrade-by-default 400 (see checklist below)
+3. **net/http differential tests** — `test/` corpus comparing accept/reject decisions where applicable
+4. **Fuzz targets** — nightly fuzz workflow for request parsing / upgrade surfaces
+5. **Race and poison CI jobs** — `-race` where available; `rawhttp_poison` build-tag jobs for slice lifetime
 
 ## Mitigations present
 
@@ -57,7 +66,7 @@ It is **not** claimed to be:
 33. `AllowedHosts` matches FQDN trailing dots; `BasicAuthMiddleware` (constant-time) / `RequestIDMiddleware`
 34. `Server.ReadBufferSize` independent of `MaxHeaderBytes` ceiling; FS `RejectSymlinks` / `HideDotFiles`
 
-## Smuggling / desync audit checklist
+## Smuggling / desync checklist
 
 Status key: **Mitigated** (corpus + parser rule) · **Partial** (common forms rejected; exotic variants open) · **Out of scope**
 
@@ -109,7 +118,7 @@ On a same-input differential corpus (RawHTTP `ServeConn` vs `net/http` server), 
 - `%2e` path segments
 - `Upgrade` / `Connection: upgrade` (RawHTTP **400** by default; `net/http` may still invoke the handler). With `AllowUpgrade`, RawHTTP is still stricter on malformed WS handshakes (POST, HTTP/1.0, `h2c`, multi-value Upgrade, duplicate Key, body present).
 
-No corpus case in that audit run showed RawHTTP **looser** than `net/http` on the compared accept/reject decision. Prefer a reviewed reverse proxy when front-end and RawHTTP parsers must agree under attack traffic.
+No corpus case in that comparison run showed RawHTTP **looser** than `net/http` on the compared accept/reject decision. Prefer a reviewed reverse proxy when front-end and RawHTTP parsers must agree under attack traffic.
 
 ## Known gaps / operator guidance
 
@@ -139,7 +148,7 @@ govulncheck ./...
 
 GitHub Actions runs on every push/PR:
 
-1. **unit + security** — all `test/` tests except long fasthttp gates
+1. **unit + security** — all `test/` tests except long comparison gates
 2. **race** — race detector (`test/`), plus a second job under `-tags rawhttp_poison`
 3. **coverage** — `rawhttp` package ≥70% statement coverage
 4. **style** — gofmt, go vet, staticcheck, golangci-lint

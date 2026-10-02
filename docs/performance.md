@@ -71,7 +71,7 @@ Trimmed-median ratios per run. Host-specific; re-calibrate after first Linux CI 
 
 | Scenario | min | median | max | max/min | Floor chosen |
 |----------|----:|-------:|----:|--------:|-------------:|
-| plaintext | 2.74 | 3.05 | 3.45 | 1.26 | **2.35** (~10% below lowest obs.; prior audit min 2.61) |
+| plaintext | 2.74 | 3.05 | 3.45 | 1.26 | **2.35** (~10% below lowest obs.; prior measured min 2.61) |
 | json | 1.88 | 2.01 | 2.13 | 1.13 | 1.65 (unchanged) |
 | headers | 3.46 | 3.77 | 4.06 | 1.17 | 1.5 (unchanged; not raised for CI margin) |
 | chunked | 2.01 | 2.25 | 2.57 | 1.28 | 1.5 (unchanged) |

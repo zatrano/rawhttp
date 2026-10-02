@@ -256,7 +256,7 @@ func (c *Ctx) Header(name string) []byte {
 	return c.headerScan(name)
 }
 
-// Peek is an alias for Header (fasthttp-style).
+// Peek is an alias for Header (short form).
 func (c *Ctx) Peek(name string) []byte { return c.Header(name) }
 
 func equalFoldStrASCII(a, b string) bool {

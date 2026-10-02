@@ -56,7 +56,7 @@ type HostClient struct {
 	// MaxChunks caps chunked response frames. Zero → 16384.
 	MaxChunks int
 	// MaxIdemponentCallAttempts retries idempotent methods on connection errors
-	// (fasthttp-compatible name). Zero → 5. Negative → 1 (no retry).
+	// (compatibility name). Zero → 5. Negative → 1 (no retry).
 	MaxIdemponentCallAttempts int
 	// RetryIfErr decides whether to retry after an error. When set, it replaces
 	// the default idempotent-method policy. attempts starts at 1.
@@ -483,7 +483,7 @@ func (hc *HostClient) dialTimeout() time.Duration {
 }
 
 func (hc *HostClient) readTimeout() time.Duration {
-	// 0 and negative both mean unlimited (fasthttp HostClient parity for 0).
+	// 0 and negative both mean unlimited (HostClient timeout convention for 0).
 	return hc.ReadTimeout
 }
 

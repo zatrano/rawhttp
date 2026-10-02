@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.2 - 2026-10-02
+
+### Changed
+
+- Default builds compile `poisonEnabled` to a constant `false` so the compiler DCE removes poison fill paths (`nm` shows no poison symbols without `-tags rawhttp_poison`).
+- Replace process labels / wording outside allowlisted docs; SECURITY controls stay verifiable.
+- CI unit matrix adds Go **1.22.x** alongside **1.25.x**.
+
 ## v0.2.1 - 2026-09-30
 
 ### Documentation

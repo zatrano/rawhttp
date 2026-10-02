@@ -5,7 +5,7 @@ Install RawHTTP and run a minimal server in a few minutes.
 ## Installation
 
 ```bash
-go get github.com/zatrano/rawhttp@v0.2.1
+go get github.com/zatrano/rawhttp@v0.2.2
 ```
 
 Module path: `github.com/zatrano/rawhttp`. Go 1.22+.

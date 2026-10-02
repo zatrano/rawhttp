@@ -17,7 +17,9 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 - README / tables below are **host-specific snapshots**; absolute ns and TCP RPS move with CPU load and GOMAXPROCS.
 - TCP multi-rival tables are snapshots; order can change between runs on the same host.
 
-## Measured results (snapshot)
+## Measured results (snapshots)
+
+### TCP multi-rival (2026-09-30)
 
 | Field | Value |
 |-------|--------|
@@ -28,7 +30,7 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 | CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
 | Command | `go run . -c 64 -d 3s -rounds 3` in `scripts/multibench` |
 
-### Median snapshot RPS (one host)
+#### Median snapshot RPS (one host)
 
 | Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
@@ -39,14 +41,38 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 
-### ServeConn microbench (median of 3× `-count=3`, `-benchtime=2s`)
+### ServeConn gates + microbench (2026-10-02)
+
+| Field | Value |
+|-------|--------|
+| Date | 2026-10-02 |
+| Tag | v0.2.2 |
+| Go | 1.25.13 windows/amd64 |
+| CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
+| Gate command | `cd test && go test -run '^(TestGate_|TestAllocs_)' -count=1 -v` |
+| Microbench command | `cd test && go test -run=^$ -bench='Benchmark(RawHTTP\|FastHTTP\|NetHTTP)_(Plaintext\|JSONPost)$' -benchmem -benchtime=2s -count=5` |
+
+#### Gate trimmed medians (this host)
+
+| Scenario | vs | Ratio | Floor |
+|----------|-----|------:|------:|
+| plaintext | fasthttp | **2.84×** | 2.35× |
+| JSON POST | fasthttp | **2.08×** | 1.65× |
+| headers | fasthttp | **3.59×** | 1.50× |
+| chunked | fasthttp | **2.09×** | 1.50× |
+| plaintext | net/http | **24.9×** | 8.0× |
+| JSON POST | net/http | **17.3×** | 4.0× |
+| client | fasthttp | **1.13×** (info) | 1.05× |
+| allocs plaintext hello | — | **0** | 0 |
+
+#### ServeConn microbench (median of 5× `-count=5`, `-benchtime=2s`)
 
 | Bench | RawHTTP | fasthttp | net/http |
 |-------|--------:|---------:|---------:|
-| Plaintext ns/op (allocs) | **256 (0)** | 789 (0) | 10223 (13) |
-| JSON POST ns/op (allocs) | **597 (0)** | 937 (0) | — |
+| Plaintext ns/op (allocs) | **257 (0)** | 735 (0) | 7562 (13) |
+| JSON POST ns/op (allocs) | **458 (0)** | 863 (0) | — |
 
-ServeConn plaintext (this snapshot): about **3.1×** vs fasthttp, **0 allocs** (host-specific; CI floors are separate).
+ServeConn plaintext (this snapshot): about **2.9×** vs fasthttp, **29×** vs net/http, **0 allocs** (host-specific; CI floors are separate).
 ## CI ServeConn gate mechanics
 
 Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):

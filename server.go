@@ -91,7 +91,7 @@ type Server struct {
 	// DisableRequestStats skips TotalRequests increments on the serve hot path.
 	DisableRequestStats bool
 
-	// CloseOnShutdown is accepted for fasthttp API parity. rawhttp always
+	// CloseOnShutdown is accepted for API compatibility. rawhttp always
 	// forces Connection: close once Shutdown begins so Wait returns promptly
 	// (idle conns are also closed in Shutdown).
 	CloseOnShutdown bool
@@ -121,7 +121,7 @@ type Server struct {
 	TrustedProxies []string
 
 	// NoDefaultDate omits the Date response header. By default rawhttp sends
-	// a coarse (1s) Date header like fasthttp, without a per-request time.Now.
+	// a coarse (1s) Date header without a per-request time.Now.
 	NoDefaultDate bool
 
 	// NoDefaultContentType omits the default Content-Type: text/plain on 200
@@ -190,7 +190,7 @@ type Server struct {
 
 	// KeepHijackedConns, when true, does not Close hijacked connections after
 	// the handler returns (caller owns lifecycle). Default false matches
-	// fasthttp: the accept loop closes the conn when the serve goroutine ends.
+	// the accept loop closes the conn when the serve goroutine ends.
 	KeepHijackedConns bool
 
 	// AllowUpgrade, when true, admits a standards-shaped WebSocket handshake
@@ -1012,7 +1012,9 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				return drainErr
 			}
 		}
-		poisonPinnedBuffer(cr)
+		if poisonEnabled {
+			poisonPinnedBuffer(cr)
+		}
 		cr.release()
 		// Keep remaining bytes at front so the next request has a contiguous buffer.
 		if cr.r > len(cr.buf)/2 {
@@ -1038,7 +1040,9 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if err := writeResponse(conn, ctx, closeConn); err != nil {
 			return err
 		}
-		poisonCtxRequestSlices(ctx)
+		if poisonEnabled {
+			poisonCtxRequestSlices(ctx)
+		}
 		if reduceMem {
 			if cap(ctx.reqBody) > 4096 {
 				ctx.reqBody = nil

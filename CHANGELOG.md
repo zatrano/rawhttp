@@ -1,10 +1,21 @@
 # Changelog
 
-## v0.2.3 - 2026-10-02
+## v0.2.3 - 2026-10-05
+
+### Fixed
+
+- Evaluate the effective body limit (`Server.MaxRequestBodySize` / `RequestConfig.MaxRequestBodySize`) and `RequestConfig.RejectStatus` before `100 Continue`. A known `Content-Length` over the cap is `413` with `Connection: close` and no `100 Continue`. Chunked `Expect: 100-continue` still receives `100`; the cap is applied while reading.
+- After headers are released, a chunked body larger than the connection read buffer can be read up to the body cap (`413`) instead of failing as `431`.
+
+### Added
+
+- `RequestConfig.RejectStatus` and `RejectRetryAfter`. A status in 400–599 from `HeaderReceived` writes a short fixed response (standard text for 413/429/503; `Retry-After` when set), does not read the body, does not run the handler, sends `Connection: close`, and does not parse a pipelined next request. Zero keeps the previous behavior.
+- `RequestConfig.StreamBody` streams that request via `Ctx.RequestBodyStream`. It does not disable `Server.StreamRequestBody`. When the per-request stream is left unread, the connection closes after the response.
 
 ### Documentation
 
 - Promote status to **GA for application embedding** (ZATRANO V3 transport). Tag line remains 0.2.x; reverse-proxy claims unchanged. SECURITY / README / production guide updated.
+- SECURITY notes the `100 Continue` and pre-handler reject differences versus `net/http`.
 
 ## v0.2.2 - 2026-10-02
 

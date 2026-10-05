@@ -41,7 +41,7 @@ _ = s.Shutdown(ctx) // or s.Close()
 | `AllowUpgrade` | Opt-in: admit a standards-shaped WebSocket handshake to the handler (default **false** → 400). No frame codec; see [hijacking.md](hijacking.md) |
 | `ReduceMemoryUsage` | Drop large body buffers after request |
 | `ErrorHandler` / `ErrorCallback` / `ErrorLog` | Errors / panics |
-| `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits |
+| `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits (`RejectStatus`, `StreamBody`) |
 | `MaxConnsPerIP` / `MaxRequestsPerConn` / `MaxConnDuration` | Abuse controls |
 | `TCPKeepalive` / `TCPKeepalivePeriod` | TCP options |
 | `ConnState` | Lifecycle hook |

@@ -122,6 +122,8 @@ On a same-input differential corpus (RawHTTP `ServeConn` vs `net/http` server), 
 - Empty `Host`
 - `%2e` path segments
 - `Upgrade` / `Connection: upgrade` (RawHTTP **400** by default; `net/http` may still invoke the handler). With `AllowUpgrade`, RawHTTP is still stricter on malformed WS handshakes (POST, HTTP/1.0, `h2c`, multi-value Upgrade, duplicate Key, body present).
+- `Expect: 100-continue` with a known `Content-Length` above the effective body cap: RawHTTP answers **413** and does **not** write `100 Continue`. `net/http` sends `100 Continue` when the handler first reads the body, then a `MaxBytesReader` in the handler can fail mid-body. Chunked `Expect` (no length yet) still gets `100`, and the cap is applied while reading.
+- `RequestConfig.RejectStatus` (400–599) writes a fixed response and closes without reading the body or calling the handler. `net/http` has no equivalent pre-handler reject; a handler always starts, and unread bodies are consumed for keep-alive. A per-request `StreamBody` that the handler does not finish also closes the connection instead of draining it.
 
 No corpus case in that comparison run showed RawHTTP **looser** than `net/http` on the compared accept/reject decision. Prefer a reviewed reverse proxy when front-end and RawHTTP parsers must agree under attack traffic.
 

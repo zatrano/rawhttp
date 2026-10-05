@@ -21,7 +21,7 @@
 
 Zero values select package defaults. Negative values disable deadlines where the implementation allows (used in benches/tests).
 
-Per-request overrides via `HeaderReceived` → `RequestConfig{ReadTimeout, MaxRequestBodySize}`.
+Per-request overrides via `HeaderReceived` → `RequestConfig{ReadTimeout, MaxRequestBodySize, RejectStatus, RejectRetryAfter, StreamBody}`. `RejectStatus` 400–599 ends the request before the body is read.
 
 Full limit table (body/headers/concurrency) and **per-connection memory** (8 KiB read buffer; default no write buffer; `Ctx` pool scratch 512+256+512 B): [Production](production.md).
 

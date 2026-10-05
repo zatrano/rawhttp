@@ -9,19 +9,33 @@ n := ctx.ContentLength()
 
 Limited by `Server.MaxRequestBodySize`. Oversized → `413` / `ErrBodyTooLarge`.
 
+## Expect: 100-continue
+
+The effective cap (`Server.MaxRequestBodySize`, or `RequestConfig.MaxRequestBodySize` from `HeaderReceived`) is checked **before** `100 Continue`.
+
+- `Content-Length` greater than the cap: `413`, `Connection: close`, and **no** `100 Continue`. The handler does not run. The connection closes after the response.
+- No `Content-Length` (chunked) with `Expect: 100-continue`: `100 Continue` is sent, then the cap is applied while the body is read. Crossing the cap yields `413`.
+- `ContinueHandler` returning false still rejects with `417` and does not send `100`. That check runs before the length check.
+
+`HeaderReceived` returning `RequestConfig.RejectStatus` in 400–599 is decided even earlier: a short response is written, the body is not read, the handler does not run, and the connection closes (`Connection: close`). Bytes already buffered for a pipelined next request are not parsed. `RejectStatus` `0` keeps the previous behavior. `RejectRetryAfter` (seconds), when positive, sets `Retry-After`. Statuses 413 and 429 without a retry delay reuse the standard static responses.
+
 ## Streaming request body
 
-Opt-in:
+Server-wide:
 
 ```go
 s := &rawhttp.Server{
 	StreamRequestBody: true,
 	Handler: func(ctx *rawhttp.Ctx) {
 		r := ctx.RequestBodyStream()
-		// read r; unread remainder is drained after handler
+		// read r; unread remainder is drained so the connection can stay keep-alive
 	},
 }
 ```
+
+Per request, `RequestConfig.StreamBody: true` streams that request even when `Server.StreamRequestBody` is false. `StreamBody: false` does **not** disable a server-wide stream. The body cap is applied while the stream is read. If a per-request stream is not fully consumed, the response is written and the connection is closed instead of draining the rest for keep-alive.
+
+A chunked body larger than the connection read buffer is read up to the body cap (`413`). It is not rejected as `431` merely because the header buffer filled after the headers were released.
 
 ## Response body
 

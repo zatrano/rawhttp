@@ -60,6 +60,8 @@ var (
 	errDuplicateCL          = errors.New("rawhttp: duplicate Content-Length")
 	errDuplicateHost        = errors.New("rawhttp: duplicate Host header")
 	errExpectationFailed    = errors.New("rawhttp: expectation failed")
+	errRequestRejected      = errors.New("rawhttp: request rejected")
+	errStreamUnread         = errors.New("rawhttp: streamed body was not consumed")
 	ErrHeaderInvalid        = errors.New("rawhttp: response header contains CR/LF")
 	ErrHeaderTooLarge       = errors.New("rawhttp: response headers too large")
 	ErrServerClosed         = errors.New("rawhttp: server closed")

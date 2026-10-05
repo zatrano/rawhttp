@@ -232,6 +232,17 @@ type RequestConfig struct {
 	ReadTimeout time.Duration
 	// MaxRequestBodySize overrides the body size cap. Zero keeps server default.
 	MaxRequestBodySize int
+	// RejectStatus, when 400–599, writes a short response and closes the
+	// connection without reading the body or running the handler. Zero keeps
+	// today's behavior.
+	RejectStatus int
+	// RejectRetryAfter, when positive, adds Retry-After on a RejectStatus response.
+	// The value is a delay in seconds.
+	RejectRetryAfter int
+	// StreamBody serves this request's body through Ctx.RequestBodyStream.
+	// It does not turn streaming off: Server.StreamRequestBody still applies
+	// when this is false. When both are set, the request is streamed.
+	StreamBody bool
 }
 
 // BodyLimitConfig returns a HeaderReceived helper that caps MaxRequestBodySize at n.
@@ -447,6 +458,7 @@ func (s *Server) Serve(ln net.Listener) error {
 			peerIP = connRemoteIP(conn)
 			if !s.perIP.tryAcquire(peerIP, s.MaxConnsPerIP) {
 				writeTooManyRequests(conn)
+				s.reportConnState(conn, StateClosed)
 				_ = conn.Close()
 				continue
 			}
@@ -456,6 +468,7 @@ func (s *Server) Serve(ln net.Listener) error {
 				if peerIP != "" {
 					s.perIP.release(peerIP)
 				}
+				s.reportConnState(conn, StateClosed)
 				_ = conn.Close()
 				continue
 			}
@@ -714,6 +727,9 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 	for {
 		ctx.reset()
+		cr.unpinned = false
+		streamReqBody = s.StreamRequestBody
+		closeUnreadStream := false
 		ctx.remoteAddr = remote
 		ctx.localAddr = local
 		ctx.isTLS = isTLS
@@ -811,6 +827,19 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				bodyReadTO = cfg.ReadTimeout
 				bodyReadTOSet = true
 			}
+			if cfg.StreamBody {
+				streamReqBody = true
+				closeUnreadStream = true
+			}
+			if cfg.RejectStatus >= 400 && cfg.RejectStatus <= 599 {
+				if !skipDL {
+					if err := s.setWriteDeadline(conn); err != nil {
+						return err
+					}
+				}
+				writeFixedStatus(conn, cfg.RejectStatus, cfg.RejectRetryAfter)
+				return errRequestRejected
+			}
 		}
 
 		if len(s.AllowedHosts) > 0 && !hostAllowed(ctx.host, s.AllowedHosts) {
@@ -865,6 +894,17 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 		needBody := (ctx.clSet && ctx.contentLength > 0) || ctx.chunked
 		bodyPinned := false // Content-Length body still aliases the read buffer
+		// A known length over the cap is rejected before 100 Continue.
+		// Chunked bodies have no length yet: send 100, then enforce the cap while reading.
+		if needBody && !ctx.chunked && ctx.clSet && ctx.contentLength > reqMaxBody {
+			if !skipDL {
+				if err := s.setWriteDeadline(conn); err != nil {
+					return err
+				}
+			}
+			writeEntityTooLarge(conn)
+			return ErrBodyTooLarge
+		}
 		if needBody {
 			if ctx.expectContinue {
 				if !skipDL {
@@ -898,13 +938,6 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			// buffer — keep header slices pinned, skip ownership copies.
 			if !streamReqBody && !ctx.chunked && ctx.clSet && ctx.contentLength > 0 {
 				n := ctx.contentLength
-				if n > reqMaxBody {
-					if !skipDL {
-						_ = s.setWriteDeadline(conn)
-					}
-					writeEntityTooLarge(conn)
-					return ErrBodyTooLarge
-				}
 				if body, ok := cr.takeBufferedBody(n); ok {
 					// Copy body into owned buffer so response keep-alive cache
 					// can key on a stable &reqBody[0]; headers stay pinned.
@@ -1005,6 +1038,15 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			return nil
 		}
 		if streamReqBody && ctx.reqStream != nil {
+			unread := closeUnreadStream && !ctx.reqStream.done
+			if unread {
+				releaseRequestStream(ctx.reqStream)
+				ctx.reqStream = nil
+				if err := writeResponse(conn, ctx, true); err != nil {
+					return err
+				}
+				return errStreamUnread
+			}
 			drainErr := ctx.reqStream.drain()
 			releaseRequestStream(ctx.reqStream)
 			ctx.reqStream = nil

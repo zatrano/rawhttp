@@ -8,11 +8,12 @@ import (
 )
 
 type connReader struct {
-	conn   net.Conn
-	buf    []byte
-	r, w   int
-	off    int
-	pooled bool
+	conn     net.Conn
+	buf      []byte
+	r, w     int
+	off      int
+	pooled   bool
+	unpinned bool // release() copied header slices; consumed bytes may be discarded
 }
 
 func newConnReader(conn net.Conn, size int) *connReader {
@@ -61,6 +62,9 @@ func (cr *connReader) fill() error {
 		cr.compact()
 	}
 	if cr.w == len(cr.buf) {
+		if cr.unpinned && cr.off > cr.r {
+			cr.r = cr.off
+		}
 		if cr.r == cr.off && cr.r > 0 {
 			cr.compact()
 		} else {
@@ -150,4 +154,7 @@ func (cr *connReader) readFull(dst []byte) error {
 	return nil
 }
 
-func (cr *connReader) release() { cr.r = cr.off }
+func (cr *connReader) release() {
+	cr.r = cr.off
+	cr.unpinned = true
+}

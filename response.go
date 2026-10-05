@@ -80,6 +80,52 @@ func writeHeaderTooLarge(conn net.Conn) {
 	_, _ = conn.Write(status431)
 }
 
+func writeFixedStatus(conn net.Conn, code, retryAfter int) {
+	if retryAfter <= 0 {
+		switch code {
+		case 413:
+			writeEntityTooLarge(conn)
+			return
+		case 429:
+			writeTooManyRequests(conn)
+			return
+		}
+	}
+	body := fixedReason(code)
+	var b []byte
+	b = append(b, "HTTP/1.1 "...)
+	b = strconv.AppendInt(b, int64(code), 10)
+	b = append(b, ' ')
+	b = append(b, body...)
+	b = append(b, "\r\nContent-Type: text/plain\r\nConnection: close\r\n"...)
+	if retryAfter > 0 {
+		b = append(b, "Retry-After: "...)
+		b = strconv.AppendInt(b, int64(retryAfter), 10)
+		b = append(b, "\r\n"...)
+	}
+	b = append(b, "Content-Length: "...)
+	b = strconv.AppendInt(b, int64(len(body)), 10)
+	b = append(b, "\r\n\r\n"...)
+	b = append(b, body...)
+	_, _ = conn.Write(b)
+}
+
+func fixedReason(code int) string {
+	switch code {
+	case 413:
+		return "Entity Too Large"
+	case 429:
+		return "Too Many Requests"
+	case 503:
+		return "Service Unavailable"
+	default:
+		if text := statusText(code); text != "" && text != "Status" {
+			return text
+		}
+		return "Error"
+	}
+}
+
 func writeContinue(conn net.Conn) error {
 	_, err := conn.Write(continue100)
 	return err

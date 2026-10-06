@@ -142,6 +142,22 @@ type Server struct {
 	// from accept/ServeConn start. Zero means unlimited.
 	MaxConnDuration time.Duration
 
+	// LingerDrain is how many unread request bytes are discarded after an
+	// early error or RejectStatus response, before the connection is closed.
+	// Zero uses 256 KiB. The discard runs on the connection goroutine.
+	LingerDrain int
+	// LingerTimeout is the total time that discard may take. Zero uses 1s.
+	// Each read deadline is the time remaining, so a slow client cannot hold
+	// the goroutine longer than this. Hijack and request-body streaming are
+	// unchanged. Shutdown and Close interrupt the wait immediately.
+	LingerTimeout time.Duration
+	// MaxLingering caps how many connections may discard leftover bytes at
+	// once. Zero uses 1024. Negative means unlimited. When the cap is full
+	// the discard is skipped (no CloseWrite) and the connection is closed
+	// immediately. A lingering connection keeps its concurrency and per-IP
+	// slot until the discard ends.
+	MaxLingering int
+
 	// ContinueTimeout is the max time to read the request body after sending
 	// 100 Continue. Zero uses ReadTimeout for the body phase.
 	ContinueTimeout time.Duration
@@ -213,6 +229,9 @@ type Server struct {
 	// TotalRequests is the number of requests handled (including bad requests
 	// that produced a response).
 	TotalRequests atomic.Int64
+	// Lingering is how many connections are currently discarding unread
+	// bytes after an early error response.
+	Lingering atomic.Int64
 
 	mu            sync.Mutex
 	listeners     map[net.Listener]struct{}
@@ -220,9 +239,13 @@ type Server struct {
 	conns         map[*connState]struct{}
 	shutting      atomic.Bool
 	concurrencyCh chan struct{}
-	trustedOnce   sync.Once
-	trustedNets   []*net.IPNet
-	perIP         perIPCounter
+
+	lingerStopOnce sync.Once
+	lingerStopMu   sync.Mutex
+	lingerStop     chan struct{}
+	trustedOnce    sync.Once
+	trustedNets    []*net.IPNet
+	perIP          perIPCounter
 }
 
 // RequestConfig overrides per-request limits from HeaderReceived.
@@ -232,6 +255,17 @@ type RequestConfig struct {
 	ReadTimeout time.Duration
 	// MaxRequestBodySize overrides the body size cap. Zero keeps server default.
 	MaxRequestBodySize int
+	// RejectStatus, when 400–599, writes a short response and closes the
+	// connection without reading the body or running the handler. Zero keeps
+	// today's behavior.
+	RejectStatus int
+	// RejectRetryAfter, when positive, adds Retry-After on a RejectStatus response.
+	// The value is a delay in seconds.
+	RejectRetryAfter int
+	// StreamBody serves this request's body through Ctx.RequestBodyStream.
+	// It does not turn streaming off: Server.StreamRequestBody still applies
+	// when this is false. When both are set, the request is streamed.
+	StreamBody bool
 }
 
 // BodyLimitConfig returns a HeaderReceived helper that caps MaxRequestBodySize at n.
@@ -447,6 +481,7 @@ func (s *Server) Serve(ln net.Listener) error {
 			peerIP = connRemoteIP(conn)
 			if !s.perIP.tryAcquire(peerIP, s.MaxConnsPerIP) {
 				writeTooManyRequests(conn)
+				s.reportConnState(conn, StateClosed)
 				_ = conn.Close()
 				continue
 			}
@@ -456,6 +491,7 @@ func (s *Server) Serve(ln net.Listener) error {
 				if peerIP != "" {
 					s.perIP.release(peerIP)
 				}
+				s.reportConnState(conn, StateClosed)
 				_ = conn.Close()
 				continue
 			}
@@ -575,6 +611,7 @@ func (s *Server) trackConn(cs *connState, add bool) {
 // then waits for active handlers (or ctx cancellation, which force-closes).
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.shutting.Store(true)
+	s.stopLingerWaits()
 
 	s.mu.Lock()
 	lns := make([]net.Listener, 0, len(s.listeners))
@@ -619,6 +656,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Close immediately stops the server and closes all listeners and connections.
 func (s *Server) Close() error {
 	s.shutting.Store(true)
+	s.stopLingerWaits()
 
 	s.mu.Lock()
 	lns := make([]net.Listener, 0, len(s.listeners))
@@ -696,7 +734,6 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	noDefaultDate := s.NoDefaultDate
 	noDefaultCT := s.NoDefaultContentType
 	writeBufSize := s.WriteBufferSize
-	streamReqBody := s.StreamRequestBody
 	reduceMem := s.ReduceMemoryUsage
 	allowDotDot := s.DisablePathNormalizing
 	serverName := ""
@@ -714,6 +751,9 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 	for {
 		ctx.reset()
+		cr.unpinned = false
+		streamReqBody := s.StreamRequestBody
+		closeUnreadStream := false
 		ctx.remoteAddr = remote
 		ctx.localAddr = local
 		ctx.isTLS = isTLS
@@ -811,6 +851,20 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				bodyReadTO = cfg.ReadTimeout
 				bodyReadTOSet = true
 			}
+			if cfg.StreamBody {
+				streamReqBody = true
+				closeUnreadStream = true
+			}
+			if cfg.RejectStatus >= 400 && cfg.RejectStatus <= 599 {
+				if !skipDL {
+					if err := s.setWriteDeadline(conn); err != nil {
+						return err
+					}
+				}
+				writeFixedStatus(conn, cfg.RejectStatus, cfg.RejectRetryAfter)
+				s.lingerAfterEarlyError(conn)
+				return errRequestRejected
+			}
 		}
 
 		if len(s.AllowedHosts) > 0 && !hostAllowed(ctx.host, s.AllowedHosts) {
@@ -860,11 +914,24 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				}
 			}
 			writeExpectationFailed(conn)
+			s.lingerAfterEarlyError(conn)
 			return errExpectationFailed
 		}
 
 		needBody := (ctx.clSet && ctx.contentLength > 0) || ctx.chunked
 		bodyPinned := false // Content-Length body still aliases the read buffer
+		// A known length over the cap is rejected before 100 Continue.
+		// Chunked bodies have no length yet: send 100, then enforce the cap while reading.
+		if needBody && !ctx.chunked && ctx.clSet && ctx.contentLength > reqMaxBody {
+			if !skipDL {
+				if err := s.setWriteDeadline(conn); err != nil {
+					return err
+				}
+			}
+			writeEntityTooLarge(conn)
+			s.lingerAfterEarlyError(conn)
+			return ErrBodyTooLarge
+		}
 		if needBody {
 			if ctx.expectContinue {
 				if !skipDL {
@@ -898,13 +965,6 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			// buffer — keep header slices pinned, skip ownership copies.
 			if !streamReqBody && !ctx.chunked && ctx.clSet && ctx.contentLength > 0 {
 				n := ctx.contentLength
-				if n > reqMaxBody {
-					if !skipDL {
-						_ = s.setWriteDeadline(conn)
-					}
-					writeEntityTooLarge(conn)
-					return ErrBodyTooLarge
-				}
 				if body, ok := cr.takeBufferedBody(n); ok {
 					// Copy body into owned buffer so response keep-alive cache
 					// can key on a stable &reqBody[0]; headers stay pinned.
@@ -983,6 +1043,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 							_ = s.setWriteDeadline(conn)
 						}
 						writeEntityTooLarge(conn)
+						s.lingerAfterEarlyError(conn)
 						return err
 					}
 					return s.clientError(conn, err)
@@ -1005,6 +1066,15 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			return nil
 		}
 		if streamReqBody && ctx.reqStream != nil {
+			unread := closeUnreadStream && !ctx.reqStream.done
+			if unread {
+				releaseRequestStream(ctx.reqStream)
+				ctx.reqStream = nil
+				if err := writeResponse(conn, ctx, true); err != nil {
+					return err
+				}
+				return errStreamUnread
+			}
 			drainErr := ctx.reqStream.drain()
 			releaseRequestStream(ctx.reqStream)
 			ctx.reqStream = nil
@@ -1066,17 +1136,26 @@ func (s *Server) clientErrorCtx(ctx *Ctx, conn net.Conn, err error) error {
 		return nil
 	}
 	_ = s.setWriteDeadline(conn)
+	wrote := false
 	switch {
 	case errors.Is(err, errExpectationFailed):
 		writeExpectationFailed(conn)
+		wrote = true
 	case errors.Is(err, errBufferFull):
 		writeHeaderTooLarge(conn)
+		wrote = true
 	case errors.Is(err, ErrURITooLong):
 		writeURITooLong(conn)
+		wrote = true
 	case errors.Is(err, ErrMisdirectedRequest):
 		writeMisdirectedRequest(conn)
+		wrote = true
 	case isBadRequest(err):
 		writeBadRequest(conn)
+		wrote = true
+	}
+	if wrote {
+		s.lingerAfterEarlyError(conn)
 	}
 	if s.ErrorHandler != nil {
 		s.ErrorHandler(ctx, err)

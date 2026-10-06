@@ -56,7 +56,7 @@ _ = s.ListenAndServe(":8080")
 
 | Type | Purpose |
 |------|---------|
-| `RequestConfig` | Per-request overrides from `HeaderReceived` |
+| `RequestConfig` | Per-request overrides from `HeaderReceived`: `ReadTimeout`, `MaxRequestBodySize`, `RejectStatus` (400–599 aborts before the body), `RejectRetryAfter` (seconds), `StreamBody` |
 | `ConnState` | `StateNew`, `StateActive`, `StateIdle`, `StateClosed` |
 | `FormValueFunc` | `func(ctx *Ctx, key string) []byte` |
 | `PreforkConfig` | Prefork worker settings |

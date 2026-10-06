@@ -41,14 +41,16 @@ _ = s.Shutdown(ctx) // or s.Close()
 | `AllowUpgrade` | Opt-in: admit a standards-shaped WebSocket handshake to the handler (default **false** → 400). No frame codec; see [hijacking.md](hijacking.md) |
 | `ReduceMemoryUsage` | Drop large body buffers after request |
 | `ErrorHandler` / `ErrorCallback` / `ErrorLog` | Errors / panics |
-| `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits |
+| `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits (`RejectStatus`, `StreamBody`) |
+| `LingerDrain` / `LingerTimeout` | After an early error response, discard at most this many bytes for at most this long (default 256 KiB / 1s), then close. The byte cap does not end the wait early. `Shutdown` / `Close` interrupt the wait |
+| `MaxLingering` | How many connections may be in that discard at once. Zero uses 1024. Negative means unlimited. When the cap is full the discard is skipped and the connection closes immediately |
 | `MaxConnsPerIP` / `MaxRequestsPerConn` / `MaxConnDuration` | Abuse controls |
 | `TCPKeepalive` / `TCPKeepalivePeriod` | TCP options |
 | `ConnState` | Lifecycle hook |
 | `Name` | `Server` response header (empty → omit) |
 | `NoDefaultDate` / `NoDefaultContentType` | Default header policy |
 
-Stats (atomics): `OpenConnections`, `TotalConnections`, `TotalRequests`.
+Stats (atomics): `OpenConnections`, `TotalConnections`, `TotalRequests`, `Lingering`.
 
 ## ServeConn
 

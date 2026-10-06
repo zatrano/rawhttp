@@ -17,7 +17,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.2.2)
+[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.2.3)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -31,7 +31,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.2.2 (GA for application embedding).** Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
+**Status: v0.2.3 (GA for application embedding).** Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
 
 ```text
 Your app / framework
@@ -46,7 +46,7 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 ## Install
 
 ```bash
-go get github.com/zatrano/rawhttp@v0.2.2
+go get github.com/zatrano/rawhttp@v0.2.3
 ```
 
 Tests live in a separate module (`test/`); run with: `cd test && go test ./...`

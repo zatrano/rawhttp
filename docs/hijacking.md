@@ -115,7 +115,13 @@ After `Hijack`, when the handler **returns**, the accept-loop goroutine ends and
 - `MaxConnsPerIP` is decremented
 - `OpenConnections` decreases
 
-With `KeepHijackedConns: true` the TCP conn stays open for the caller, but it **no longer counts** toward those limits. `Shutdown` waits only for accept-loop goroutines (`activeConn`); it does **not** wait on or close KeepHijacked connections after the handler returns (similar to `net/http`: the hijacker owns the conn). `Close` force-closes tracked conns still in the map; a KeepHijacked conn already removed from tracking is not closed by `Shutdown`.
+With `KeepHijackedConns: true` the TCP conn stays open for the caller, but it **no longer counts** toward those limits once the handler returns.
+
+### Shutdown and Close
+
+After `Hijack` returns, the connection belongs to the application. `Shutdown` does not change its read or write deadlines and does not close it. If the handler is still blocked in `Read` or `Write`, `Shutdown` waits until the context ends and returns `context.DeadlineExceeded`; the handler's read is still blocked. Idle keep-alive connections (not hijacked) are still closed, and an in-progress post-error linger discard is interrupted by the server's stop signal. The discard loop uses its own short read slices; `Shutdown` does not call `SetReadDeadline` on any other connection.
+
+`Close` is the hard stop. While the handler is still inside the hijack (the connection is still tracked), `Close` closes that connection and unblocks the handler. After the handler has returned with `KeepHijackedConns: true`, the connection is no longer tracked, and `Close` leaves it open. Closing it is the application's job, including any WebSocket close frame and the wait for the peer.
 
 ### Hijacked connection accounting
 

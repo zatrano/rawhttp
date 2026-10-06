@@ -17,7 +17,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.2.3)
+[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v0.2.4)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -31,7 +31,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.2.3 (GA for application embedding).** Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
+**Status: v0.2.4 (GA for application embedding).** Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
 
 ```text
 Your app / framework
@@ -46,7 +46,7 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 ## Install
 
 ```bash
-go get github.com/zatrano/rawhttp@v0.2.3
+go get github.com/zatrano/rawhttp@v0.2.4
 ```
 
 Tests live in a separate module (`test/`); run with: `cd test && go test ./...`
@@ -82,7 +82,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Middleware helpers (CORS, compress, rate limit, auth, …) — compose by wrapping `Handler`
 - Proxy dialers (HTTP CONNECT / SOCKS5), `TCPDialer` + DNS cache
 
-**Not included in v0.2.2:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
+**Not included:** path-parameter router (`:id` / `{id}`), header-name normalization disable API, WebSocket frame codec. By default `Upgrade` / `Connection: upgrade` are **rejected** with 400; set `Server.AllowUpgrade` to admit a standards-shaped handshake to `Hijack` — see [Hijacking](docs/hijacking.md).
 
 ## Documentation
 
@@ -105,7 +105,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 ## Benchmarks
 
-Measured on **2026-10-02**, **v0.2.2**, Go **1.25.13**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns/RPS are **host-specific** and vary with load; treat CI ServeConn floors as authoritative (see [docs/performance.md](docs/performance.md)).
+The tables below are the host-specific snapshot already recorded in [docs/performance.md](docs/performance.md) (TCP multibench 2026-09-30, ServeConn 2026-10-02, Go 1.25.13, Windows/amd64, GOMAXPROCS=8, i5-1135G7 @ 2.40GHz). v0.2.4 does not change the serve path and was not re-measured. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract.
 
 Numbers below mix a **2026-09-30 TCP multibench snapshot** (RPS tables) with **2026-10-02 ServeConn gates + microbench** on this host. CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
 
@@ -194,7 +194,7 @@ Absolute ns/op below are **host-specific** (median of 5 runs, `-count=5`; re-mea
 | plaintext | net/http | **24.9×** | 8.0× |
 | JSON POST | net/http | **17.3×** | 4.0× |
 
-### CI performance contract (v0.2.2)
+### CI performance contract (v0.2.4)
 
 ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus scenario floors (see [docs/performance.md](docs/performance.md) for soft 0.85× / trim / soft-retry). Floors today:
 

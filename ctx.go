@@ -102,6 +102,8 @@ type Ctx struct {
 
 	conn net.Conn
 	cr   *connReader
+	// markHijacked records ownership transfer while the handler is still running.
+	markHijacked func()
 
 	remoteAddr string
 	localAddr  string
@@ -182,6 +184,7 @@ func (c *Ctx) reset() {
 	c.handlerTime = time.Time{}
 	c.conn = nil
 	c.cr = nil
+	c.markHijacked = nil
 	c.maxMultipartMemory = 0
 	c.maxMultipartFiles = 0
 	c.maxMultipartParts = 0

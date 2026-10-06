@@ -144,7 +144,7 @@ func (d *TCPDialer) dial(addr string, dualStack bool, timeout time.Duration) (ne
 
 	var lastErr error
 	n := len(addrs)
-	start := int(d.rrIndex(host, addrs) % uint64(n)) //nolint:gosec // n > 0
+	start := int(d.rrIndex(host) % uint64(n)) //nolint:gosec // n > 0
 	for i := 0; i < n; i++ {
 		ip := addrs[(start+i)%n].IP
 		if !dualStack && ip.To4() == nil {
@@ -201,7 +201,7 @@ func (d *TCPDialer) lookup(host string) ([]net.IPAddr, error) {
 	return addrs, nil
 }
 
-func (d *TCPDialer) rrIndex(host string, addrs []net.IPAddr) uint64 {
+func (d *TCPDialer) rrIndex(host string) uint64 {
 	if v, ok := d.cache.Load(host); ok {
 		e := v.(*dnsCacheEntry)
 		return e.rr.Add(1) - 1

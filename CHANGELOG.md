@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.4 - 2026-10-07
+
+### Fixed
+
+- `Shutdown` no longer sets a read deadline on every tracked connection. It only signals in-progress post-error linger discards. Those discards poll a short read slice and the server stop channel. A hijacked connection keeps the deadlines the application set, and a handler blocked in `Read` is not interrupted. If that handler has not returned when the shutdown context ends, `Shutdown` returns `context.DeadlineExceeded` and leaves the connection open. Idle keep-alive connections are still closed.
+
+### Documentation
+
+- `Shutdown` does not close or re-deadline a hijacked connection. `Close` closes one whose handler is still running; after the handler returns with `KeepHijackedConns`, `Close` leaves it open. Status, install line, and guides say v0.2.4. The README performance tables stay the recorded host-specific snapshot; they were not re-measured.
+
 ## v0.2.3 - 2026-10-06
 
 ### Fixed

@@ -29,6 +29,9 @@ func (c *Ctx) Hijack() (conn net.Conn, leftover []byte, err error) {
 		c.cr = nil
 	}
 	c.hijacked = true
+	if c.markHijacked != nil {
+		c.markHijacked()
+	}
 	conn = c.conn
 	c.conn = nil
 	c.cacheOK = false

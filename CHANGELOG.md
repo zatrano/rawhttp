@@ -5,6 +5,7 @@
 ### Fixed
 
 - Evaluate the effective body limit (`Server.MaxRequestBodySize` / `RequestConfig.MaxRequestBodySize`) and `RequestConfig.RejectStatus` before `100 Continue`. A known `Content-Length` over the cap is `413` with `Connection: close` and no `100 Continue`. Chunked `Expect: 100-continue` still receives `100`; the cap is applied while reading.
+- After an early error or `RejectStatus` response (`Connection: close`), the connection goroutine half-closes when `CloseWrite` exists (`TCPConn`, `tls.Conn`), discards at most `LingerDrain` bytes (default 256 KiB) for at most `LingerTimeout` (default 1s), then closes. Hitting the byte cap early still waits out the timeout before `Close`: closing with unread TCP data aborts the socket on Windows and drops the response. A client still writing can read `413`/`400`/`431` until that timeout. Hijack and request-body streaming are unchanged. No extra goroutine.
 - After headers are released, a chunked body larger than the connection read buffer can be read up to the body cap (`413`) instead of failing as `431`.
 
 ### Added

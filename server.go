@@ -142,6 +142,16 @@ type Server struct {
 	// from accept/ServeConn start. Zero means unlimited.
 	MaxConnDuration time.Duration
 
+	// LingerDrain is how many unread request bytes are discarded after an
+	// early error or RejectStatus response, before the connection is closed.
+	// Zero uses 256 KiB. The discard runs on the connection goroutine.
+	LingerDrain int
+	// LingerTimeout is the total time that discard may take. Zero uses 1s.
+	// Each read deadline is the time remaining, so a slow client cannot hold
+	// the goroutine longer than this. Hijack and request-body streaming are
+	// unchanged.
+	LingerTimeout time.Duration
+
 	// ContinueTimeout is the max time to read the request body after sending
 	// 100 Continue. Zero uses ReadTimeout for the body phase.
 	ContinueTimeout time.Duration
@@ -838,6 +848,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 					}
 				}
 				writeFixedStatus(conn, cfg.RejectStatus, cfg.RejectRetryAfter)
+				s.lingerAfterEarlyError(conn)
 				return errRequestRejected
 			}
 		}
@@ -889,6 +900,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				}
 			}
 			writeExpectationFailed(conn)
+			s.lingerAfterEarlyError(conn)
 			return errExpectationFailed
 		}
 
@@ -903,6 +915,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				}
 			}
 			writeEntityTooLarge(conn)
+			s.lingerAfterEarlyError(conn)
 			return ErrBodyTooLarge
 		}
 		if needBody {
@@ -1016,6 +1029,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 							_ = s.setWriteDeadline(conn)
 						}
 						writeEntityTooLarge(conn)
+						s.lingerAfterEarlyError(conn)
 						return err
 					}
 					return s.clientError(conn, err)
@@ -1108,17 +1122,26 @@ func (s *Server) clientErrorCtx(ctx *Ctx, conn net.Conn, err error) error {
 		return nil
 	}
 	_ = s.setWriteDeadline(conn)
+	wrote := false
 	switch {
 	case errors.Is(err, errExpectationFailed):
 		writeExpectationFailed(conn)
+		wrote = true
 	case errors.Is(err, errBufferFull):
 		writeHeaderTooLarge(conn)
+		wrote = true
 	case errors.Is(err, ErrURITooLong):
 		writeURITooLong(conn)
+		wrote = true
 	case errors.Is(err, ErrMisdirectedRequest):
 		writeMisdirectedRequest(conn)
+		wrote = true
 	case isBadRequest(err):
 		writeBadRequest(conn)
+		wrote = true
+	}
+	if wrote {
+		s.lingerAfterEarlyError(conn)
 	}
 	if s.ErrorHandler != nil {
 		s.ErrorHandler(ctx, err)

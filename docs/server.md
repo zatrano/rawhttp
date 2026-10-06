@@ -42,6 +42,7 @@ _ = s.Shutdown(ctx) // or s.Close()
 | `ReduceMemoryUsage` | Drop large body buffers after request |
 | `ErrorHandler` / `ErrorCallback` / `ErrorLog` | Errors / panics |
 | `ContinueHandler` / `HeaderReceived` | 100-continue / per-request limits (`RejectStatus`, `StreamBody`) |
+| `LingerDrain` / `LingerTimeout` | After an early error response, discard at most this many bytes for at most this long (default 256 KiB / 1s), then close. The byte cap does not end the wait early |
 | `MaxConnsPerIP` / `MaxRequestsPerConn` / `MaxConnDuration` | Abuse controls |
 | `TCPKeepalive` / `TCPKeepalivePeriod` | TCP options |
 | `ConnState` | Lifecycle hook |

@@ -149,8 +149,14 @@ type Server struct {
 	// LingerTimeout is the total time that discard may take. Zero uses 1s.
 	// Each read deadline is the time remaining, so a slow client cannot hold
 	// the goroutine longer than this. Hijack and request-body streaming are
-	// unchanged.
+	// unchanged. Shutdown and Close interrupt the wait immediately.
 	LingerTimeout time.Duration
+	// MaxLingering caps how many connections may discard leftover bytes at
+	// once. Zero uses 1024. Negative means unlimited. When the cap is full
+	// the discard is skipped (no CloseWrite) and the connection is closed
+	// immediately. A lingering connection keeps its concurrency and per-IP
+	// slot until the discard ends.
+	MaxLingering int
 
 	// ContinueTimeout is the max time to read the request body after sending
 	// 100 Continue. Zero uses ReadTimeout for the body phase.
@@ -223,6 +229,9 @@ type Server struct {
 	// TotalRequests is the number of requests handled (including bad requests
 	// that produced a response).
 	TotalRequests atomic.Int64
+	// Lingering is how many connections are currently discarding unread
+	// bytes after an early error response.
+	Lingering atomic.Int64
 
 	mu            sync.Mutex
 	listeners     map[net.Listener]struct{}
@@ -230,9 +239,13 @@ type Server struct {
 	conns         map[*connState]struct{}
 	shutting      atomic.Bool
 	concurrencyCh chan struct{}
-	trustedOnce   sync.Once
-	trustedNets   []*net.IPNet
-	perIP         perIPCounter
+
+	lingerStopOnce sync.Once
+	lingerStopMu   sync.Mutex
+	lingerStop     chan struct{}
+	trustedOnce    sync.Once
+	trustedNets    []*net.IPNet
+	perIP          perIPCounter
 }
 
 // RequestConfig overrides per-request limits from HeaderReceived.
@@ -598,6 +611,7 @@ func (s *Server) trackConn(cs *connState, add bool) {
 // then waits for active handlers (or ctx cancellation, which force-closes).
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.shutting.Store(true)
+	s.stopLingerWaits()
 
 	s.mu.Lock()
 	lns := make([]net.Listener, 0, len(s.listeners))
@@ -642,6 +656,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Close immediately stops the server and closes all listeners and connections.
 func (s *Server) Close() error {
 	s.shutting.Store(true)
+	s.stopLingerWaits()
 
 	s.mu.Lock()
 	lns := make([]net.Listener, 0, len(s.listeners))

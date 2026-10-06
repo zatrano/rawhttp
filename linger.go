@@ -8,20 +8,22 @@ import (
 const (
 	defaultLingerDrain   = 256 << 10
 	defaultLingerTimeout = time.Second
+	defaultMaxLingering  = 1024
 )
 
-// lingerAfterEarlyError runs after an early error or RejectStatus response
-// has been written with Connection: close. It half-closes when the conn
-// supports it, discards a bounded amount of unread request bytes, and
-// returns so the caller can Close. It does not start a goroutine.
+// lingerAfterEarlyError discards leftover request bytes so a client can
+// still read the error response. Windows sends RST when Close runs with
+// unread data, which drops that response.
 //
-// After the byte cap, the goroutine waits out the remaining timeout before
-// returning. Closing sooner aborts the socket on Windows (unread TCP data
-// becomes RST) and the client loses the response it has not read yet.
+// The wait is skipped, with no CloseWrite, when the server is shutting
+// down or MaxLingering connections are already discarding. The caller
+// then closes immediately.
 func (s *Server) lingerAfterEarlyError(conn net.Conn) {
-	if conn == nil || s == nil {
+	if conn == nil || s == nil || !s.acquireLinger() {
 		return
 	}
+	defer s.Lingering.Add(-1)
+
 	limit := s.LingerDrain
 	if limit <= 0 {
 		limit = defaultLingerDrain
@@ -38,21 +40,123 @@ func (s *Server) lingerAfterEarlyError(conn net.Conn) {
 	got := 0
 	for got < limit {
 		left := time.Until(deadline)
-		if left <= 0 {
+		if left <= 0 || s.lingerStopped() {
 			return
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(left))
+		if s.lingerStopped() {
+			return
+		}
 		n := limit - got
 		if n > len(buf) {
 			n = len(buf)
 		}
 		nr, err := conn.Read(buf[:n])
 		got += nr
-		if err != nil || nr == 0 {
+		if s.lingerStopped() || time.Until(deadline) <= 0 {
+			return
+		}
+		if nr == 0 && err == nil {
+			return
+		}
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
 			return
 		}
 	}
-	if left := time.Until(deadline); left > 0 {
-		time.Sleep(left)
+	left := time.Until(deadline)
+	if left <= 0 || s.lingerStopped() {
+		return
+	}
+	timer := time.NewTimer(left)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-s.lingerStopChan():
+	}
+}
+
+func (s *Server) lingerCap() int64 {
+	if s.MaxLingering < 0 {
+		return -1
+	}
+	if s.MaxLingering == 0 {
+		return defaultMaxLingering
+	}
+	return int64(s.MaxLingering)
+}
+
+func (s *Server) acquireLinger() bool {
+	if s.shutting.Load() {
+		return false
+	}
+	max := s.lingerCap()
+	if max < 0 {
+		s.Lingering.Add(1)
+		if s.shutting.Load() {
+			s.Lingering.Add(-1)
+			return false
+		}
+		return true
+	}
+	for {
+		cur := s.Lingering.Load()
+		if cur >= max {
+			return false
+		}
+		if s.Lingering.CompareAndSwap(cur, cur+1) {
+			if s.shutting.Load() {
+				s.Lingering.Add(-1)
+				return false
+			}
+			return true
+		}
+	}
+}
+
+func (s *Server) lingerStopChan() chan struct{} {
+	s.lingerStopOnce.Do(func() {
+		s.lingerStop = make(chan struct{})
+	})
+	return s.lingerStop
+}
+
+func (s *Server) lingerStopped() bool {
+	if s.shutting.Load() {
+		return true
+	}
+	select {
+	case <-s.lingerStopChan():
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Server) stopLingerWaits() {
+	ch := s.lingerStopChan()
+	s.lingerStopMu.Lock()
+	select {
+	case <-ch:
+		s.lingerStopMu.Unlock()
+		return
+	default:
+		close(ch)
+	}
+	s.lingerStopMu.Unlock()
+
+	// Unblock a discard blocked in Read. Closing the stop channel alone
+	// does not interrupt that read.
+	s.mu.Lock()
+	conns := make([]net.Conn, 0, len(s.conns))
+	for cs := range s.conns {
+		conns = append(conns, cs.conn)
+	}
+	s.mu.Unlock()
+	now := time.Now()
+	for _, c := range conns {
+		_ = c.SetReadDeadline(now)
 	}
 }

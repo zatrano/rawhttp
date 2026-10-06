@@ -1,17 +1,19 @@
 # Changelog
 
-## v0.2.3 - 2026-10-05
+## v0.2.3 - 2026-10-06
 
 ### Fixed
 
 - Evaluate the effective body limit (`Server.MaxRequestBodySize` / `RequestConfig.MaxRequestBodySize`) and `RequestConfig.RejectStatus` before `100 Continue`. A known `Content-Length` over the cap is `413` with `Connection: close` and no `100 Continue`. Chunked `Expect: 100-continue` still receives `100`; the cap is applied while reading.
 - After an early error or `RejectStatus` response (`Connection: close`), the connection goroutine half-closes when `CloseWrite` exists (`TCPConn`, `tls.Conn`), discards at most `LingerDrain` bytes (default 256 KiB) for at most `LingerTimeout` (default 1s), then closes. Hitting the byte cap early still waits out the timeout before `Close`: closing with unread TCP data aborts the socket on Windows and drops the response. A client still writing can read `413`/`400`/`431` until that timeout. Hijack and request-body streaming are unchanged. No extra goroutine.
+- The post-error discard is capped by `Server.MaxLingering` (default 1024; `0` uses that default; negative is unlimited). The connection goroutine increments `Server.Lingering` on entry and decrements it on the way out, including panic. When the cap is full, or the server is already shutting down, the discard is skipped (no `CloseWrite`) and the connection is closed immediately. `Shutdown` and `Close` interrupt an in-progress wait so a full `LingerTimeout` cannot outlive the server. A lingering connection still holds its concurrency and per-IP slot.
 - After headers are released, a chunked body larger than the connection read buffer can be read up to the body cap (`413`) instead of failing as `431`.
 
 ### Added
 
 - `RequestConfig.RejectStatus` and `RejectRetryAfter`. A status in 400–599 from `HeaderReceived` writes a short fixed response (standard text for 413/429/503; `Retry-After` when set), does not read the body, does not run the handler, sends `Connection: close`, and does not parse a pipelined next request. Zero keeps the previous behavior.
 - `RequestConfig.StreamBody` streams that request via `Ctx.RequestBodyStream`. It does not disable `Server.StreamRequestBody`. When the per-request stream is left unread, the connection closes after the response.
+- `Server.MaxLingering` and `Server.Lingering`. `MaxLingering` bounds how many connections may sit in the post-error discard at once. `Lingering` is the atomic count of those connections.
 
 ### Documentation
 

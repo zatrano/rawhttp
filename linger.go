@@ -1,6 +1,7 @@
 package rawhttp
 
 import (
+	"errors"
 	"net"
 	"time"
 )
@@ -9,6 +10,9 @@ const (
 	defaultLingerDrain   = 256 << 10
 	defaultLingerTimeout = time.Second
 	defaultMaxLingering  = 1024
+	// lingerReadSlice bounds one discard Read so Shutdown is noticed
+	// without setting a deadline on any other connection.
+	lingerReadSlice = 20 * time.Millisecond
 )
 
 // lingerAfterEarlyError discards leftover request bytes so a client can
@@ -43,7 +47,11 @@ func (s *Server) lingerAfterEarlyError(conn net.Conn) {
 		if left <= 0 || s.lingerStopped() {
 			return
 		}
-		_ = conn.SetReadDeadline(time.Now().Add(left))
+		slice := left
+		if slice > lingerReadSlice {
+			slice = lingerReadSlice
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(slice))
 		if s.lingerStopped() {
 			return
 		}
@@ -56,7 +64,14 @@ func (s *Server) lingerAfterEarlyError(conn net.Conn) {
 		if s.lingerStopped() || time.Until(deadline) <= 0 {
 			return
 		}
-		if err != nil || nr == 0 {
+		if err != nil {
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				continue
+			}
+			return
+		}
+		if nr == 0 {
 			return
 		}
 	}
@@ -140,17 +155,4 @@ func (s *Server) stopLingerWaits() {
 		close(ch)
 	}
 	s.lingerStopMu.Unlock()
-
-	// Unblock a discard blocked in Read. Closing the stop channel alone
-	// does not interrupt that read.
-	s.mu.Lock()
-	conns := make([]net.Conn, 0, len(s.conns))
-	for cs := range s.conns {
-		conns = append(conns, cs.conn)
-	}
-	s.mu.Unlock()
-	now := time.Now()
-	for _, c := range conns {
-		_ = c.SetReadDeadline(now)
-	}
 }

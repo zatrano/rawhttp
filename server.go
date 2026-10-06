@@ -607,8 +607,11 @@ func (s *Server) trackConn(cs *connState, add bool) {
 	s.mu.Unlock()
 }
 
-// Shutdown gracefully stops the server: closes listeners, idle connections,
-// then waits for active handlers (or ctx cancellation, which force-closes).
+// Shutdown gracefully stops the server: closes listeners and idle keep-alive
+// connections, interrupts lingering discards, then waits for active handlers.
+// A connection already passed to Hijack is not closed and its deadlines are
+// not changed. Context cancellation still closes every other tracked connection.
+// Close is the hard stop and does close a hijacked connection that is still tracked.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.shutting.Store(true)
 	s.stopLingerWaits()
@@ -644,11 +647,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		s.mu.Lock()
+		hijackedLeft := false
 		for cs := range s.conns {
+			if cs.hijacked.Load() {
+				hijackedLeft = true
+				continue
+			}
 			_ = cs.conn.Close()
 		}
 		s.mu.Unlock()
-		<-done
+		if !hijackedLeft {
+			<-done
+		}
 		return ctx.Err()
 	}
 }
@@ -768,6 +778,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		ctx.trustedProxies = trustedProxies
 		ctx.conn = conn
 		ctx.cr = cr
+		ctx.markHijacked = nil
+		if cs != nil {
+			ctx.markHijacked = func() { cs.hijacked.Store(true) }
+		}
 		ctx.connID = connID
 		ctx.connTime = connStart
 		reqNum++

@@ -24,7 +24,7 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 | Field | Value |
 |-------|--------|
 | Date | 2026-09-30 |
-| Tag | v0.2.2 |
+| Tag | historical host-specific snapshot; not re-measured for v0.2.4 |
 | Go | 1.25.13 windows/amd64 |
 | GOMAXPROCS | 8 |
 | CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
@@ -46,7 +46,7 @@ Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 | Field | Value |
 |-------|--------|
 | Date | 2026-10-02 |
-| Tag | v0.2.2 |
+| Tag | historical host-specific snapshot; not re-measured for v0.2.4 |
 | Go | 1.25.13 windows/amd64 |
 | CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
 | Gate command | `cd test && go test -run '^(TestGate_|TestAllocs_)' -count=1 -v` |

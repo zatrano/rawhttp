@@ -8,10 +8,10 @@
 4. Use `TrustedProxies` only for known reverse-proxy CIDRs before trusting `ClientIP`.
 5. Enable `DisablePipelining` on hostile edges if needed.
 6. TLS via `ListenAndServeTLS` or terminate TLS at a proxy and set `RequireTLS` appropriately.
-7. Graceful stop: `Shutdown(ctx)`.
+7. Graceful stop: `Shutdown(ctx)`. It does not close or re-deadline a hijacked connection. `Close` does close one whose handler has not returned.
 8. Optional: `ListenReusePort`, `Prefork` for multi-core listen scaling.
 9. Observe `OpenConnections` / `TotalRequests`; hook `ConnState` / `ErrorHandler`.
-10. Read [SECURITY.md](../SECURITY.md) — v0.2.2 is GA for application embedding (not a reverse-proxy claim).
+10. Read [SECURITY.md](../SECURITY.md) — v0.2.4 is GA for application embedding (not a reverse-proxy claim).
 11. If you enable `AllowUpgrade`, enforce Origin / auth and either keep the WS loop inside the handler or use an application-level limiter (Hijack releases `Concurrency` / `MaxConnsPerIP` when the handler returns — see [hijacking.md](hijacking.md)).
 12. Downstream integration tests: prefer `-tags rawhttp_poison` so accidental post-handler slice retention fails loudly.
 

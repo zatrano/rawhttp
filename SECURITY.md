@@ -11,7 +11,9 @@ Report issues via GitHub. Do not open public issues for unfixed zero-days withou
 
 ## Status (GA readiness)
 
-RawHTTP **v0.2.2** is **Generally Available** as the HTTP/1.1 transport for application servers (ZATRANO V3 and similar embedders). Tag remains on the **0.2.x** line: the public Go API may still evolve with semver-minor care; there is no separate `v1.0.0` tag required for V3 cutover.
+RawHTTP **v0.2.4** is **Generally Available** as the HTTP/1.1 transport for application servers (ZATRANO V3 and similar embedders). Tag remains on the **0.2.x** line: the public Go API may still evolve with semver-minor care; there is no separate `v1.0.0` tag required for V3 cutover.
+
+`Shutdown` does not change deadlines on a hijacked connection and does not close it. The application owns the close sequence (for example a WebSocket close frame and the wait for the peer). `Close` still closes a hijacked connection whose handler has not returned. See [docs/hijacking.md](docs/hijacking.md).
 
 It implements common safety controls (timeouts, body limits, Host requirement, CL/TE conflict rejection, CRLF sanitization on response headers, HEAD body suppression, Expect: 100-continue).
 

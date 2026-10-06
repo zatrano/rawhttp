@@ -56,13 +56,7 @@ func (s *Server) lingerAfterEarlyError(conn net.Conn) {
 		if s.lingerStopped() || time.Until(deadline) <= 0 {
 			return
 		}
-		if nr == 0 && err == nil {
-			return
-		}
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
+		if err != nil || nr == 0 {
 			return
 		}
 	}

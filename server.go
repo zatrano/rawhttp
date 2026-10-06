@@ -734,7 +734,6 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	noDefaultDate := s.NoDefaultDate
 	noDefaultCT := s.NoDefaultContentType
 	writeBufSize := s.WriteBufferSize
-	streamReqBody := s.StreamRequestBody
 	reduceMem := s.ReduceMemoryUsage
 	allowDotDot := s.DisablePathNormalizing
 	serverName := ""
@@ -753,7 +752,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	for {
 		ctx.reset()
 		cr.unpinned = false
-		streamReqBody = s.StreamRequestBody
+		streamReqBody := s.StreamRequestBody
 		closeUnreadStream := false
 		ctx.remoteAddr = remote
 		ctx.localAddr = local

@@ -34,7 +34,6 @@ const (
 	defaultMaxResponseHeaderBytes = 64 << 10 // 64 KiB
 	defaultIdempotentAttempts     = 5
 	defaultClientUserAgent        = "rawhttp"
-	defaultMaxRedirects           = 0 // do not follow by default
 )
 
 // Request is a client HTTP/1.1 request.

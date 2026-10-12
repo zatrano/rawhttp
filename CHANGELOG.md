@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.6 - 2026-10-12
+
+### Changed
+
+- Keep-alive read and write deadlines are re-armed only when the armed deadline is later than the new need or no longer covers it. A header timeout tighter than the idle timeout still replaces it while the header block is incomplete. A header block already in the buffer is not tightened and is not cleared. A dripped header is still cut by `ReadHeaderTimeout`, and a slow body is still cut by `ReadTimeout`.
+
 ## v0.2.5 - 2026-10-12
 
 ### Fixed

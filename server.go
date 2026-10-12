@@ -1,6 +1,7 @@
 package rawhttp
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -779,6 +780,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	if len(s.TrustedProxies) > 0 {
 		trustedProxies = s.trustedProxyNets()
 	}
+	// Armed deadlines survive across keep-alive requests so a still-valid
+	// timer is not reset on every request. A tighter phase (header cap under
+	// an idle cap, or a new write window) still replaces the timer.
+	var readArmed, writeArmed time.Time
 
 	for {
 		ctx.reset()
@@ -821,8 +826,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			// Idle only while waiting for the first byte of the next request.
 			// Once any data is buffered (or arrives), switch to header deadline
 			// so a dripped request-line cannot burn the full IdleTimeout.
+			// A request that already ends at the header block does not tighten:
+			// parsing will not read again.
 			if cr.w == cr.off {
-				if err := s.setIdleDeadline(conn); err != nil {
+				if err := s.armRead(conn, &readArmed, s.idleTimeout()); err != nil {
 					return err
 				}
 				for cr.w == cr.off {
@@ -831,8 +838,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 					}
 				}
 			}
-			if err := s.setHeaderDeadline(conn); err != nil {
-				return err
+			if !headerBlockReady(cr.buf[cr.off:cr.w]) {
+				if err := s.armRead(conn, &readArmed, s.headerTimeout()); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -859,8 +868,8 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if s.ConnState != nil {
 			s.reportConnState(conn, StateActive)
 		}
-		if !skipDL {
-			if err := s.setHeaderDeadline(conn); err != nil {
+		if !skipDL && !headerBlockReady(cr.buf[cr.off:cr.w]) {
+			if err := s.armRead(conn, &readArmed, s.headerTimeout()); err != nil {
 				return err
 			}
 		}
@@ -892,7 +901,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			}
 			if cfg.RejectStatus >= 400 && cfg.RejectStatus <= 599 {
 				if !skipDL {
-					if err := s.setWriteDeadline(conn); err != nil {
+					if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 						return err
 					}
 				}
@@ -908,7 +917,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 		if s.RequireTLS && !ctx.isTLS {
 			if !skipDL {
-				if err := s.setWriteDeadline(conn); err != nil {
+				if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 					return err
 				}
 			}
@@ -921,7 +930,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if len(s.AllowedMethods) > 0 {
 			if !methodAllowed(ctx.Method, s.AllowedMethods) {
 				if !skipDL {
-					if err := s.setWriteDeadline(conn); err != nil {
+					if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 						return err
 					}
 				}
@@ -932,7 +941,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			}
 		} else if s.GetOnly && !isGetMethod(ctx.Method) {
 			if !skipDL {
-				if err := s.setWriteDeadline(conn); err != nil {
+				if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 					return err
 				}
 			}
@@ -944,7 +953,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 		if ctx.expectContinue && s.ContinueHandler != nil && !s.ContinueHandler(ctx) {
 			if !skipDL {
-				if err := s.setWriteDeadline(conn); err != nil {
+				if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 					return err
 				}
 			}
@@ -959,7 +968,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		// Chunked bodies have no length yet: send 100, then enforce the cap while reading.
 		if needBody && !ctx.chunked && ctx.clSet && ctx.contentLength > reqMaxBody {
 			if !skipDL {
-				if err := s.setWriteDeadline(conn); err != nil {
+				if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 					return err
 				}
 			}
@@ -970,7 +979,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if needBody {
 			if ctx.expectContinue {
 				if !skipDL {
-					if err := s.setWriteDeadline(conn); err != nil {
+					if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 						return err
 					}
 				}
@@ -980,18 +989,14 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			}
 			if !skipDL {
 				if ctx.expectContinue && s.ContinueTimeout > 0 {
-					if err := conn.SetReadDeadline(time.Now().Add(s.ContinueTimeout)); err != nil {
+					if err := s.armRead(conn, &readArmed, s.ContinueTimeout); err != nil {
 						return err
 					}
 				} else if bodyReadTOSet {
-					if bodyReadTO < 0 {
-						if err := conn.SetReadDeadline(time.Time{}); err != nil {
-							return err
-						}
-					} else if err := conn.SetReadDeadline(time.Now().Add(bodyReadTO)); err != nil {
+					if err := s.armRead(conn, &readArmed, bodyReadTO); err != nil {
 						return err
 					}
-				} else if err := s.setReadDeadline(conn); err != nil {
+				} else if err := s.armRead(conn, &readArmed, s.readTimeout()); err != nil {
 					return err
 				}
 			}
@@ -1065,7 +1070,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 					if err := prepareRequestBodyStream(cr, ctx, reqMaxBody, maxHdrs, maxChk); err != nil {
 						if errors.Is(err, ErrBodyTooLarge) {
 							if !skipDL {
-								_ = s.setWriteDeadline(conn)
+								_ = s.armWrite(conn, &writeArmed, s.writeTimeout())
 							}
 							writeEntityTooLarge(conn)
 							return err
@@ -1075,7 +1080,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 				} else if err := readRequestBody(cr, ctx, reqMaxBody, maxHdrs, maxChk); err != nil {
 					if errors.Is(err, ErrBodyTooLarge) {
 						if !skipDL {
-							_ = s.setWriteDeadline(conn)
+							_ = s.armWrite(conn, &writeArmed, s.writeTimeout())
 						}
 						writeEntityTooLarge(conn)
 						s.lingerAfterEarlyError(conn)
@@ -1087,7 +1092,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		}
 
 		if !skipDL {
-			if err := s.setWriteDeadline(conn); err != nil {
+			if err := s.armWrite(conn, &writeArmed, s.writeTimeout()); err != nil {
 				return err
 			}
 		}
@@ -1246,37 +1251,63 @@ func (s *Server) noDeadlines() bool {
 	return s.readTimeout() <= 0 && s.writeTimeout() <= 0 && s.idleTimeout() <= 0 && s.headerTimeout() <= 0
 }
 
-func (s *Server) setIdleDeadline(conn net.Conn) error {
-	if s.noDeadlines() {
-		return nil
-	}
-	d := s.idleTimeout()
-	if d <= 0 {
-		return conn.SetReadDeadline(time.Time{})
-	}
-	return conn.SetReadDeadline(time.Now().Add(d))
+// headerBlockReady reports whether buf already holds the end of the header
+// block. Parsing that request does not read the socket again.
+func headerBlockReady(buf []byte) bool {
+	return bytes.Contains(buf, []byte("\r\n\r\n"))
 }
 
-func (s *Server) setReadDeadline(conn net.Conn) error {
-	if s.noDeadlines() {
-		return nil
+// deadlineSlack is the refresh window for an already-armed timer of duration d.
+// A looser timer is never kept in place of a tighter one.
+func deadlineSlack(d time.Duration) time.Duration {
+	s := d / 8
+	if s > time.Second {
+		return time.Second
 	}
-	d := s.readTimeout()
-	if d <= 0 {
-		return conn.SetReadDeadline(time.Time{})
-	}
-	return conn.SetReadDeadline(time.Now().Add(d))
+	return s
 }
 
-func (s *Server) setHeaderDeadline(conn net.Conn) error {
-	if s.noDeadlines() {
-		return nil
-	}
-	d := s.headerTimeout()
+// armRead sets the read deadline to now+d. A deadline that is already at least
+// as tight, and still covers d-slack, is left in place. d <= 0 clears it once.
+func (s *Server) armRead(conn net.Conn, armed *time.Time, d time.Duration) error {
 	if d <= 0 {
+		if armed.IsZero() {
+			return nil
+		}
+		*armed = time.Time{}
 		return conn.SetReadDeadline(time.Time{})
 	}
-	return conn.SetReadDeadline(time.Now().Add(d))
+	now := time.Now()
+	need := now.Add(d)
+	if !armed.IsZero() && armed.After(now) && !armed.After(need) && armed.After(need.Add(-deadlineSlack(d))) {
+		return nil
+	}
+	if err := conn.SetReadDeadline(need); err != nil {
+		return err
+	}
+	*armed = need
+	return nil
+}
+
+// armWrite is armRead for the write deadline.
+func (s *Server) armWrite(conn net.Conn, armed *time.Time, d time.Duration) error {
+	if d <= 0 {
+		if armed.IsZero() {
+			return nil
+		}
+		*armed = time.Time{}
+		return conn.SetWriteDeadline(time.Time{})
+	}
+	now := time.Now()
+	need := now.Add(d)
+	if !armed.IsZero() && armed.After(now) && !armed.After(need) && armed.After(need.Add(-deadlineSlack(d))) {
+		return nil
+	}
+	if err := conn.SetWriteDeadline(need); err != nil {
+		return err
+	}
+	*armed = need
+	return nil
 }
 
 func (s *Server) setWriteDeadline(conn net.Conn) error {

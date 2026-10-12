@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.5 - 2026-10-12
+
+### Fixed
+
+- `Serve` no longer calls `WaitGroup.Add` at the same time `Close` or `Shutdown` calls `Wait`. A connection accepted as shutdown begins is closed instead of being tracked. This was a race under `go test -race`.
+
 ## v0.2.4 - 2026-10-07
 
 ### Fixed

@@ -498,8 +498,17 @@ func (s *Server) Serve(ln net.Listener) error {
 		}
 		cs := &connState{conn: conn}
 		cs.idle.Store(true)
-		s.trackConn(cs, true)
-		s.activeConn.Add(1)
+		if !s.admitConn(cs) {
+			s.reportConnState(conn, StateClosed)
+			if peerIP != "" {
+				s.perIP.release(peerIP)
+			}
+			if s.concurrencyCh != nil {
+				<-s.concurrencyCh
+			}
+			_ = conn.Close()
+			continue
+		}
 		s.TotalConnections.Add(1)
 		s.OpenConnections.Add(1)
 		go func() {
@@ -607,16 +616,28 @@ func (s *Server) trackConn(cs *connState, add bool) {
 	s.mu.Unlock()
 }
 
+// admitConn records cs and increments activeConn, unless shutdown has begun.
+// The WaitGroup Add and the shutdown flag share s.mu, so Close/Shutdown cannot
+// Wait while Add is still running.
+func (s *Server) admitConn(cs *connState) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shutting.Load() {
+		return false
+	}
+	s.conns[cs] = struct{}{}
+	s.activeConn.Add(1)
+	return true
+}
+
 // Shutdown gracefully stops the server: closes listeners and idle keep-alive
 // connections, interrupts lingering discards, then waits for active handlers.
 // A connection already passed to Hijack is not closed and its deadlines are
 // not changed. Context cancellation still closes every other tracked connection.
 // Close is the hard stop and does close a hijacked connection that is still tracked.
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.shutting.Store(true)
-	s.stopLingerWaits()
-
 	s.mu.Lock()
+	s.shutting.Store(true)
 	lns := make([]net.Listener, 0, len(s.listeners))
 	for ln := range s.listeners {
 		lns = append(lns, ln)
@@ -628,6 +649,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 	s.mu.Unlock()
+	s.stopLingerWaits()
 
 	for _, ln := range lns {
 		_ = ln.Close()
@@ -665,10 +687,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // Close immediately stops the server and closes all listeners and connections.
 func (s *Server) Close() error {
-	s.shutting.Store(true)
-	s.stopLingerWaits()
-
 	s.mu.Lock()
+	s.shutting.Store(true)
 	lns := make([]net.Listener, 0, len(s.listeners))
 	for ln := range s.listeners {
 		lns = append(lns, ln)
@@ -678,6 +698,7 @@ func (s *Server) Close() error {
 		conns = append(conns, cs.conn)
 	}
 	s.mu.Unlock()
+	s.stopLingerWaits()
 
 	for _, ln := range lns {
 		_ = ln.Close()

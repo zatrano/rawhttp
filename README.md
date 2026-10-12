@@ -105,7 +105,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 ## Benchmarks
 
-The tables below are the host-specific snapshot already recorded in [docs/performance.md](docs/performance.md) (TCP multibench 2026-09-30, ServeConn 2026-10-02, Go 1.25.13, Windows/amd64, GOMAXPROCS=8, i5-1135G7 @ 2.40GHz). v0.2.4 does not change the serve path and was not re-measured. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract.
+The tables below are the host-specific snapshot already recorded in [docs/performance.md](docs/performance.md) (TCP multibench 2026-09-30, ServeConn 2026-10-02, Go 1.25.13, Windows/amd64, GOMAXPROCS=8, i5-1135G7 @ 2.40GHz). v0.2.4 and v0.2.5 did not change that measured path and were not re-measured. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract.
 
 Numbers below mix a **2026-09-30 TCP multibench snapshot** (RPS tables) with **2026-10-02 ServeConn gates + microbench** on this host. CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
 
@@ -194,7 +194,7 @@ Absolute ns/op below are **host-specific** (median of 5 runs, `-count=5`; re-mea
 | plaintext | net/http | **24.9×** | 8.0× |
 | JSON POST | net/http | **17.3×** | 4.0× |
 
-### CI performance contract (v0.2.4)
+### CI performance contract
 
 ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus scenario floors (see [docs/performance.md](docs/performance.md) for soft 0.85× / trim / soft-retry). Floors today:
 

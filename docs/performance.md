@@ -19,36 +19,39 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 ## Measured results (snapshots)
 
-### TCP multi-rival (2026-09-30)
+### TCP multi-rival (2026-10-12)
 
 | Field | Value |
 |-------|--------|
-| Date | 2026-09-30 |
-| Tag | historical host-specific snapshot; not re-measured for v0.2.4 or v0.2.5 |
-| Go | 1.25.13 windows/amd64 |
-| GOMAXPROCS | 8 |
-| CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
+| Date | 2026-10-12 |
+| Tag | v0.2.5 |
+| Go | 1.25.13 windows/amd64 (Hertz sonic does not build on Go 1.26) |
+| GOMAXPROCS | 4 |
+| CPU | Intel Core i5-6200U @ 2.30GHz (2 cores / 4 threads) |
+| Power plan | Dengeli |
 | Command | `go run . -c 64 -d 3s -rounds 3` in `scripts/multibench` |
 
 #### Median snapshot RPS (one host)
 
 | Scenario | RawHTTP | fasthttp | gnet | Hertz | net/http |
 |----------|--------:|---------:|-----:|------:|---------:|
-| plaintext | **149 613** | 126 166 | 115 031 | 108 968 | 76 284 |
-| json | **141 835** | 132 769 | 131 427 | 112 718 | 69 777 |
-| headers | **133 871** | 119 144 | 104 071 | 95 492 | 89 328 |
-| chunked | **139 057** | 130 533 | 129 751 | 126 293 | 76 300 |
+| plaintext | **75 475** | 71 694 | 69 205 | 67 099 | 40 849 |
+| json | **71 860** | 63 289 | 67 743 | 63 473 | 33 993 |
+| headers | **72 462** | 67 118 | 67 086 | 64 737 | 39 011 |
+| chunked | **73 074** | 68 389 | 66 964 | 64 074 | 34 217 |
 
-Hertz on Windows used `standard` network. Absolute RPS are host-specific.
+Hertz on Windows used `standard` network. Absolute RPS are host-specific. The snapshot ranking above has RawHTTP first on every scenario. A separate pairwise re-run lost plaintext to fasthttp (median 0.97×). That check is not the table. CI still uses the ServeConn floors.
 
-### ServeConn gates + microbench (2026-10-02)
+### ServeConn gates + microbench (2026-10-12)
 
 | Field | Value |
 |-------|--------|
-| Date | 2026-10-02 |
-| Tag | historical host-specific snapshot; not re-measured for v0.2.4 or v0.2.5 |
-| Go | 1.25.13 windows/amd64 |
-| CPU | 11th Gen Intel Core i5-1135G7 @ 2.40GHz |
+| Date | 2026-10-12 |
+| Tag | v0.2.5 |
+| Go | 1.26.9 windows/amd64 |
+| CPU | Intel Core i5-6200U @ 2.30GHz (2 cores / 4 threads) |
+| GOMAXPROCS | 4 |
+| Power plan | Dengeli |
 | Gate command | `cd test && go test -run '^(TestGate_|TestAllocs_)' -count=1 -v` |
 | Microbench command | `cd test && go test -run=^$ -bench='Benchmark(RawHTTP\|FastHTTP\|NetHTTP)_(Plaintext\|JSONPost)$' -benchmem -benchtime=2s -count=5` |
 
@@ -56,23 +59,25 @@ Hertz on Windows used `standard` network. Absolute RPS are host-specific.
 
 | Scenario | vs | Ratio | Floor |
 |----------|-----|------:|------:|
-| plaintext | fasthttp | **2.84×** | 2.35× |
-| JSON POST | fasthttp | **2.08×** | 1.65× |
-| headers | fasthttp | **3.59×** | 1.50× |
-| chunked | fasthttp | **2.09×** | 1.50× |
-| plaintext | net/http | **24.9×** | 8.0× |
-| JSON POST | net/http | **17.3×** | 4.0× |
-| client | fasthttp | **1.13×** (info) | 1.05× |
+| plaintext | fasthttp | **2.38×** | 2.35× |
+| JSON POST | fasthttp | **1.70×** | 1.65× |
+| headers | fasthttp | **2.99×** | 1.50× |
+| chunked | fasthttp | **1.87×** | 1.50× |
+| plaintext | net/http | **24.5×** | 8.0× |
+| JSON POST | net/http | **16.2×** | 4.0× |
+| client | fasthttp | **1.19×** (info) | 1.05× |
 | allocs plaintext hello | — | **0** | 0 |
+
+JSON vs fasthttp passed on the soft-retry. The first series had one round at 0.52×.
 
 #### ServeConn microbench (median of 5× `-count=5`, `-benchtime=2s`)
 
 | Bench | RawHTTP | fasthttp | net/http |
 |-------|--------:|---------:|---------:|
-| Plaintext ns/op (allocs) | **257 (0)** | 735 (0) | 7562 (13) |
-| JSON POST ns/op (allocs) | **458 (0)** | 863 (0) | — |
+| Plaintext ns/op (allocs) | **406 (0)** | 1001 (0) | 14413 (13) |
+| JSON POST ns/op (allocs) | **974 (0)** | 1217 (0) | — |
 
-ServeConn plaintext (this snapshot): about **2.9×** vs fasthttp, **29×** vs net/http, **0 allocs** (host-specific; CI floors are separate).
+ServeConn plaintext (this snapshot): **2.47×** vs fasthttp (1001 / 406), **35.5×** vs net/http (14413 / 406), **0 allocs**. These microbench ratios are one process in bench order. The gate ratios above are the regression measurement. CI floors are separate.
 ## CI ServeConn gate mechanics
 
 Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):

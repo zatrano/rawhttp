@@ -21,7 +21,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
-[![Peak RPS](https://img.shields.io/badge/Peak%20RPS-149k-2ea44f?style=flat-square)](#benchmarks)
+[![Peak RPS](https://img.shields.io/badge/Peak%20RPS-75k-2ea44f?style=flat-square)](#benchmarks)
 [![Errors](https://img.shields.io/badge/Errors-0-2ea44f?style=flat-square)](#benchmarks)
 [![Max connections](https://img.shields.io/badge/Max%20connections-262144-0366d6?style=flat-square)](docs/server.md)
 [![Peak memory](https://img.shields.io/badge/Peak%20memory-0%20alloc%20hello-2ea44f?style=flat-square)](#benchmarks)
@@ -105,9 +105,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 
 ## Benchmarks
 
-The tables below are the host-specific snapshot already recorded in [docs/performance.md](docs/performance.md) (TCP multibench 2026-09-30, ServeConn 2026-10-02, Go 1.25.13, Windows/amd64, GOMAXPROCS=8, i5-1135G7 @ 2.40GHz). v0.2.4 and v0.2.5 did not change that measured path and were not re-measured. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract.
-
-Numbers below mix a **2026-09-30 TCP multibench snapshot** (RPS tables) with **2026-10-02 ServeConn gates + microbench** on this host. CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
+Measured **2026-10-12** on Windows/amd64, CPU **i5-6200U @ 2.30GHz** (2 cores / 4 threads), `GOMAXPROCS=4`, power plan **Dengeli**. TCP multibench used Go **1.25.13** because Hertz's sonic build does not compile on Go 1.26. ServeConn gates and microbenches used Go **1.26.9**. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
 
 ### TCP multi-rival (`scripts/multibench`)
 
@@ -117,47 +115,47 @@ cd scripts/multibench && go run . -c 64 -d 3s -rounds 3
 
 Conditions: keep-alive HTTP/1.1; **same** `fasthttp.HostClient` for every server; c=64; 1s warmup + 3s timed; **3 rounds median** per server with **rotated start order**; scenarios `plaintext`, `json`, `headers`, `chunked`. Optional `-strict` is local-only (see [performance](docs/performance.md)); CI uses ServeConn gates.
 
-Notes: Hertz on Windows used `network library=standard`. Multibench uses a shared `fasthttp.HostClient` for all servers.
+Notes: Hertz on Windows used `network library=standard`. Multibench uses a shared `fasthttp.HostClient` for all servers. The median snapshot has RawHTTP first in every scenario below. A separate pairwise re-run lost plaintext to fasthttp (0.97×). CI does not use that check.
 
 #### plaintext — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **149 613** |
-| 2 | fasthttp | 126 166 |
-| 3 | gnet | 115 031 |
-| 4 | Hertz | 108 968 |
-| 5 | net/http | 76 284 |
+| 1 | **RawHTTP** | **75 475** |
+| 2 | fasthttp | 71 694 |
+| 3 | gnet | 69 205 |
+| 4 | Hertz | 67 099 |
+| 5 | net/http | 40 849 |
 
 #### json — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **141 835** |
-| 2 | fasthttp | 132 769 |
-| 3 | gnet | 131 427 |
-| 4 | Hertz | 112 718 |
-| 5 | net/http | 69 777 |
+| 1 | **RawHTTP** | **71 860** |
+| 2 | gnet | 67 743 |
+| 3 | Hertz | 63 473 |
+| 4 | fasthttp | 63 289 |
+| 5 | net/http | 33 993 |
 
 #### headers — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **133 871** |
-| 2 | fasthttp | 119 144 |
-| 3 | gnet | 104 071 |
-| 4 | Hertz | 95 492 |
-| 5 | net/http | 89 328 |
+| 1 | **RawHTTP** | **72 462** |
+| 2 | fasthttp | 67 118 |
+| 3 | gnet | 67 086 |
+| 4 | Hertz | 64 737 |
+| 5 | net/http | 39 011 |
 
 #### chunked (POST body echo) — median RPS (snapshot)
 
 | Rank | Server | req/s |
 |-----:|--------|------:|
-| 1 | **RawHTTP** | **139 057** |
-| 2 | fasthttp | 130 533 |
-| 3 | gnet | 129 751 |
-| 4 | Hertz | 126 293 |
-| 5 | net/http | 76 300 |
+| 1 | **RawHTTP** | **73 074** |
+| 2 | fasthttp | 68 389 |
+| 3 | gnet | 66 964 |
+| 4 | Hertz | 64 074 |
+| 5 | net/http | 34 217 |
 
 ### ServeConn microbench (`test/`)
 
@@ -172,27 +170,27 @@ Absolute ns/op below are **host-specific** (median of 5 runs, `-count=5`; re-mea
 
 | Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **RawHTTP** | **257** | 0 | **0** | — |
-| fasthttp | 735 | 0 | 0 | 2.86× |
-| net/http | 7562 | 1347 | 13 | 29.4× |
+| **RawHTTP** | **406** | 0 | **0** | — |
+| fasthttp | 1001 | 0 | 0 | 2.47× |
+| net/http | 14413 | 1347 | 13 | 35.5× |
 
 #### JSON POST
 
 | Server | ns/op | B/op | allocs/op | vs RawHTTP |
 |--------|------:|-----:|----------:|-----------:|
-| **RawHTTP** | **458** | 0 | **0** | — |
-| fasthttp | 863 | 0 | 0 | 1.88× |
+| **RawHTTP** | **974** | 0 | **0** | — |
+| fasthttp | 1217 | 0 | 0 | 1.25× |
 
-#### ServeConn gate trimmed medians (this host, 2026-10-02)
+#### ServeConn gate trimmed medians (this host, 2026-10-12)
 
 | Scenario | vs | Ratio | Floor |
 |----------|-----|------:|------:|
-| plaintext | fasthttp | **2.84×** | 2.35× |
-| JSON POST | fasthttp | **2.08×** | 1.65× |
-| headers | fasthttp | **3.59×** | 1.50× |
-| chunked | fasthttp | **2.09×** | 1.50× |
-| plaintext | net/http | **24.9×** | 8.0× |
-| JSON POST | net/http | **17.3×** | 4.0× |
+| plaintext | fasthttp | **2.38×** | 2.35× |
+| JSON POST | fasthttp | **1.70×** | 1.65× |
+| headers | fasthttp | **2.99×** | 1.50× |
+| chunked | fasthttp | **1.87×** | 1.50× |
+| plaintext | net/http | **24.5×** | 8.0× |
+| JSON POST | net/http | **16.2×** | 4.0× |
 
 ### CI performance contract
 
@@ -218,8 +216,8 @@ cd test && go test -run 'Gate|Allocs' -v
 | Router | bring your own | `ServeMux` | bring your own | built-in | N/A (raw) |
 | Ctx model | `*Ctx` | `ResponseWriter`+`Request` | `RequestCtx` | `RequestContext` | custom |
 | Typical use | engine under apps | general Go | Fiber / custom | microservices | custom protocols |
-| This-host plaintext TCP (median snapshot) | **149.6k** | 76.3k | 126.2k | 109.0k | 115.0k |
-| This-host ServeConn plaintext | **257 ns**, 0 alloc | 7562 ns, 13 alloc | 735 ns, 0 alloc | — | — |
+| This-host plaintext TCP (median snapshot) | **75.5k** | 40.8k | 71.7k | 67.1k | 69.2k |
+| This-host ServeConn plaintext | **406 ns**, 0 alloc | 14413 ns, 13 alloc | 1001 ns, 0 alloc | — | — |
 
 Snapshot ranking is host-specific. Methodology and gate floors: [docs/performance.md](docs/performance.md).
 ## Client

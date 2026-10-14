@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 )
 
 type connReader struct {
@@ -18,31 +19,91 @@ type connReader struct {
 
 func newConnReader(conn net.Conn, size int) *connReader {
 	cr := &connReader{conn: conn}
-	if size <= defaultBufSize {
-		bp := readerBufPool.Get().(*[]byte)
-		b := *bp
-		if cap(b) < size {
-			b = make([]byte, size)
-			cr.pooled = false
-		} else {
-			b = b[:size]
-			cr.pooled = true
-		}
-		cr.buf = b
-	} else {
-		cr.buf = make([]byte, size)
-	}
+	cr.buf, cr.pooled = acquireReadBuf(size)
 	return cr
 }
 
 func (cr *connReader) releaseBuf() {
-	if !cr.pooled || cr.buf == nil {
+	if cr.buf == nil {
 		return
 	}
-	b := cr.buf[:cap(cr.buf)]
-	readerBufPool.Put(&b)
+	recycleReadBuf(cr.buf)
 	cr.buf = nil
 	cr.pooled = false
+}
+
+// shrinkIdle drops a grown header buffer once the connection has no unread
+// bytes. The next request starts from the small buffer again.
+func (cr *connReader) shrinkIdle(want int) {
+	if cr.buf == nil || cr.w != cr.off || cap(cr.buf) <= want {
+		return
+	}
+	old := cr.buf
+	cr.buf, cr.pooled = acquireReadBuf(want)
+	cr.r, cr.w, cr.off = 0, 0, 0
+	cr.unpinned = false
+	recycleReadBuf(old)
+}
+
+// fillHeaders reads until the header block is complete, the header ceiling is
+// reached, or the socket fails. The buffer grows 4 KiB → 8 KiB → 16 KiB, then
+// by doubling up to limit. A body is not a reason to grow: this returns as
+// soon as \r\n\r\n is present.
+func (cr *connReader) fillHeaders(limit int) error {
+	if limit <= 0 {
+		limit = defaultMaxHeaderBytes
+	}
+	for {
+		if headerBlockReady(cr.buf[cr.off:cr.w]) {
+			return nil
+		}
+		if cr.w-cr.off >= limit {
+			return nil
+		}
+		if cr.w < len(cr.buf) {
+			if err := cr.fill(); err != nil {
+				// A short read still has to reach the parser so a bare LF
+				// or a truncated request line becomes 400, not a silent close.
+				if cr.w > cr.off && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
+					return nil
+				}
+				return err
+			}
+			continue
+		}
+		if len(cr.buf) >= limit || !cr.grow(limit) {
+			return nil
+		}
+	}
+}
+
+func (cr *connReader) grow(limit int) bool {
+	cur := len(cr.buf)
+	if cur >= limit {
+		return false
+	}
+	next := readBufInitial
+	if cur >= readBufInitial {
+		next = cur * 2
+	}
+	if next > limit {
+		next = limit
+	}
+	if next <= cur {
+		return false
+	}
+	nb, pooled := acquireReadBuf(next)
+	n := copy(nb, cr.buf[cr.r:cr.w])
+	recycleReadBuf(cr.buf)
+	cr.buf = nb
+	cr.pooled = pooled
+	cr.off -= cr.r
+	if cr.off < 0 {
+		cr.off = 0
+	}
+	cr.w = n
+	cr.r = 0
+	return true
 }
 
 func (cr *connReader) compact() {
@@ -157,4 +218,99 @@ func (cr *connReader) readFull(dst []byte) error {
 func (cr *connReader) release() {
 	cr.r = cr.off
 	cr.unpinned = true
+}
+
+// grownBufPool bounds how many enlarged read buffers stay alive between
+// connections. Buffers past the cap are left for the garbage collector.
+type grownBufPool struct {
+	mu   sync.Mutex
+	n    int
+	bufs [][]byte
+}
+
+func (p *grownBufPool) get(size int) []byte {
+	p.mu.Lock()
+	if p.n > 0 {
+		p.n--
+		b := p.bufs[p.n]
+		p.bufs[p.n] = nil
+		p.mu.Unlock()
+		if cap(b) >= size {
+			return b[:size]
+		}
+	} else {
+		p.mu.Unlock()
+	}
+	return make([]byte, size)
+}
+
+func (p *grownBufPool) put(b []byte) {
+	if cap(b) == 0 {
+		return
+	}
+	p.mu.Lock()
+	if p.n >= grownReadPoolMax {
+		p.mu.Unlock()
+		return
+	}
+	if p.bufs == nil {
+		p.bufs = make([][]byte, grownReadPoolMax)
+	}
+	p.bufs[p.n] = b[:cap(b)]
+	p.n++
+	p.mu.Unlock()
+}
+
+var (
+	readerBuf4K = sync.Pool{New: func() any {
+		b := make([]byte, readBufInitial)
+		return &b
+	}}
+	grown8  grownBufPool
+	grown16 grownBufPool
+)
+
+func acquireReadBuf(size int) ([]byte, bool) {
+	if size <= 0 {
+		size = readBufInitial
+	}
+	switch {
+	case size <= readBufInitial:
+		bp := readerBuf4K.Get().(*[]byte)
+		b := *bp
+		if cap(b) != readBufInitial {
+			return make([]byte, size), false
+		}
+		return b[:size], true
+	case size <= readBufStep8:
+		return grown8.get(size), capClass(size)
+	case size <= readBufStep16:
+		return grown16.get(size), capClass(size)
+	default:
+		return make([]byte, size), false
+	}
+}
+
+func capClass(size int) bool {
+	return size == readBufStep8 || size == readBufStep16 || size == readBufInitial
+}
+
+func recycleReadBuf(b []byte) {
+	if b == nil {
+		return
+	}
+	switch cap(b) {
+	case readBufInitial:
+		b = b[:readBufInitial]
+		readerBuf4K.Put(&b)
+	case readBufStep8:
+		grown8.put(b[:readBufStep8])
+	case readBufStep16:
+		grown16.put(b[:readBufStep16])
+	default:
+		if cap(b) <= defaultBufSize && cap(b) > readBufInitial {
+			b = b[:cap(b)]
+			readerBufPool.Put(&b)
+		}
+	}
 }

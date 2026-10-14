@@ -321,18 +321,26 @@ func (s *Server) headerBufSize() int {
 }
 
 func (s *Server) connReadBufSize() int {
-	hdrLim := s.headerBufSize()
+	limit := s.headerBufSize()
+	// A ceiling at or below the historical 8 KiB buffer keeps that size.
+	// A higher ceiling (framework uses 16 KiB) starts at 4 KiB and grows.
+	n := limit
+	if limit > defaultBufSize {
+		n = readBufInitial
+	}
 	if s.ReadBufferSize > 0 {
-		n := s.ReadBufferSize
+		n = s.ReadBufferSize
 		if n < 128 {
 			n = 128
 		}
-		if n < hdrLim {
-			return hdrLim
-		}
-		return n
 	}
-	return hdrLim
+	if limit > 0 && n > limit {
+		n = limit
+	}
+	if n < 128 {
+		n = 128
+	}
+	return n
 }
 
 func (s *Server) maxHeaders() int {
@@ -816,6 +824,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			s.TotalRequests.Add(1)
 		}
 
+		if cr.w == cr.off {
+			cr.shrinkIdle(bufSize)
+		}
+
 		if cs != nil {
 			cs.idle.Store(true)
 		}
@@ -847,6 +859,13 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 		if cr.r > 0 && len(cr.buf)-cr.r < 2048 {
 			cr.compact()
+		}
+		// Growing is only possible when the buffer is smaller than the ceiling.
+		// The 8 KiB default skips this and parses exactly as before.
+		if len(cr.buf) < maxHdrBytes {
+			if err := cr.fillHeaders(maxHdrBytes); err != nil {
+				return err
+			}
 		}
 
 		if err := parseRequestLineOpts(cr, ctx, allowDotDot); err != nil {

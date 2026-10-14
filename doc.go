@@ -35,7 +35,13 @@ import (
 type Handler func(ctx *Ctx)
 
 const (
-	defaultBufSize        = 8192
+	defaultBufSize = 8192
+	// readBufInitial is the per-connection read buffer. It grows only while
+	// the header block does not fit, and only up to the header ceiling.
+	readBufInitial        = 4 << 10
+	readBufStep8          = 8 << 10
+	readBufStep16         = 16 << 10
+	grownReadPoolMax      = 64
 	defaultMaxBodySize    = 4 << 20 // 4 MiB
 	defaultMaxHeaderBytes = 8192
 	defaultMaxHeaders     = 100

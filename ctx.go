@@ -921,8 +921,10 @@ func sliceOverlaps(a, b []byte) bool {
 	if len(a) == 0 || len(b) == 0 {
 		return false
 	}
-	a0 := uintptr(unsafe.Pointer(&a[0]))
-	b0 := uintptr(unsafe.Pointer(&b[0]))
+	// Addresses are compared only, so a response that still aliases the read
+	// buffer is copied before that buffer is compacted.
+	a0 := uintptr(unsafe.Pointer(&a[0])) // #nosec G103 -- backing-array range compare //nolint:gosec
+	b0 := uintptr(unsafe.Pointer(&b[0])) // #nosec G103 -- backing-array range compare //nolint:gosec
 	return a0 < b0+uintptr(len(b)) && b0 < a0+uintptr(len(a))
 }
 

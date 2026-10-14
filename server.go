@@ -1025,9 +1025,11 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			if !streamReqBody && !ctx.chunked && ctx.clSet && ctx.contentLength > 0 {
 				n := ctx.contentLength
 				if body, ok := cr.takeBufferedBody(n); ok {
-					// Copy body into owned buffer so response keep-alive cache
-					// can key on a stable &reqBody[0]; headers stay pinned.
-					ctx.reqBody = append(ctx.reqBody[:0], body...)
+					// The body stays a view of the read buffer for the handler.
+					// A response that still points at that view is copied once,
+					// after the handler and before the buffer is compacted.
+					ctx.reqBody = body
+					ctx.reqBodyView = true
 					bodyPinned = true
 				}
 			}
@@ -1117,6 +1119,9 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		}
 
 		s.callHandler(handler, ctx)
+		if ctx.reqBodyView {
+			ctx.ownViewedBody()
+		}
 		if ctx.hijacked {
 			// Ownership transferred; Accept defer closes unless KeepHijackedConns.
 			if cs != nil {

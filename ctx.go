@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 // Ctx holds one request/response cycle. Values pointing into the connection
@@ -60,8 +61,9 @@ type Ctx struct {
 	authCopy       []byte
 	originCopy     []byte
 
-	reqBody   []byte
-	reqStream *requestStream // when Server.StreamRequestBody
+	reqBody     []byte
+	reqBodyView bool
+	reqStream   *requestStream // when Server.StreamRequestBody
 
 	StatusCode int
 
@@ -155,7 +157,12 @@ func (c *Ctx) reset() {
 	c.referer = nil
 	c.authorization = nil
 	c.origin = nil
-	c.reqBody = c.reqBody[:0]
+	if c.reqBodyView {
+		c.reqBody = nil
+	} else {
+		c.reqBody = c.reqBody[:0]
+	}
+	c.reqBodyView = false
 	c.reqStream = nil
 	c.StatusCode = 200
 	c.respBuf = c.respBuf[:0]
@@ -890,6 +897,33 @@ func (c *Ctx) WriteString(s string) {
 	}
 	c.respBuf = append(c.respBuf, s...)
 	c.respBody = c.respBuf
+}
+
+// ownViewedBody copies a response body that still aliases the connection
+// buffer. The copy happens after the handler and before that buffer is
+// compacted for the next pipelined request. A body allocated by the handler
+// does not overlap, so this is a no-op on the JSON path.
+func (c *Ctx) ownViewedBody() {
+	if c == nil || !c.reqBodyView {
+		return
+	}
+	if c.cr != nil && sliceOverlaps(c.respBody, c.cr.buf) {
+		dst := make([]byte, len(c.respBody))
+		copy(dst, c.respBody)
+		c.respBody = dst
+		c.bodyIsRef = true
+	}
+	c.reqBody = nil
+	c.reqBodyView = false
+}
+
+func sliceOverlaps(a, b []byte) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	a0 := uintptr(unsafe.Pointer(&a[0]))
+	b0 := uintptr(unsafe.Pointer(&b[0]))
+	return a0 < b0+uintptr(len(b)) && b0 < a0+uintptr(len(a))
 }
 
 func (c *Ctx) SetBody(b []byte) {

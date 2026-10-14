@@ -4,7 +4,8 @@
 
 ### Changed
 
-- When `MaxHeaderBytes` is above 8 KiB, the per-connection read buffer starts at 4 KiB instead of the ceiling. While the header block is incomplete it grows to 8 KiB, then 16 KiB, then by doubling until `MaxHeaderBytes`. A ceiling of 8 KiB or less keeps the previous buffer size. A finished header does not grow the buffer to hold the body; the body is copied into the request buffer or read straight into it. When the connection is idle and no bytes are waiting, a grown buffer goes back to a pool of at most 64 buffers per size and the next request starts at 4 KiB again. A header past `MaxHeaderBytes` is still 431.
+- When `MaxHeaderBytes` is above 8 KiB, the per-connection read buffer starts at 4 KiB instead of the ceiling. While the header block is incomplete it grows to 8 KiB, then 16 KiB, then by doubling until `MaxHeaderBytes`. A ceiling of 8 KiB or less keeps the previous buffer size. A finished header does not grow the buffer to hold the body. When the connection is idle and no bytes are waiting, a grown buffer goes back to a pool of at most 64 buffers per size and the next request starts at 4 KiB again. A header past `MaxHeaderBytes` is still 431.
+- A buffered `Content-Length` body is a view of the connection buffer during the handler. It is not copied. A response body that still points into that buffer is copied once, after the handler returns and before the buffer is compacted. A body the handler allocated itself is left untouched.
 
 ## v0.2.6 - 2026-10-12
 

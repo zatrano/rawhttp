@@ -6,9 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zatrano/rawhttp"
 )
+
+// hasStatus reports whether the response status line contains code.
+// The weak ETag is hex(mtime) plus hex(size), so a search of the whole
+// response for "206" or "304" also matches that header.
+func hasStatus(resp, code string) bool {
+	line, _, _ := strings.Cut(resp, "\r\n")
+	return strings.Contains(line, " "+code+" ") || strings.HasSuffix(line, " "+code)
+}
 
 func TestFS_ServeFileAndTraversal(t *testing.T) {
 	dir := t.TempDir()
@@ -78,7 +87,7 @@ func TestFS_IfModifiedSince(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := fc.w.String()
-	if !strings.Contains(resp, "304") {
+	if !hasStatus(resp, "304") {
 		t.Fatalf("want 304: %q", resp)
 	}
 	if strings.Contains(resp, "data") {
@@ -111,7 +120,7 @@ func TestFS_ETagIfNoneMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp = fc.w.String()
-	if !strings.Contains(resp, "304") {
+	if !hasStatus(resp, "304") {
 		t.Fatalf("want 304: %q", resp)
 	}
 	if strings.Contains(resp, "payload") {
@@ -139,13 +148,20 @@ func TestFS_DisableByteRanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "r.txt"), []byte("0123456789"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// The Go 1.26 CI failure wrote this file at unix 0x6ad1206f, whose hex
+	// form is 6ad1206f and therefore contains "206". Any Go version does
+	// that for the same mtime. Pin it so the status check cannot pass by luck.
+	stamp := time.Unix(0x6ad1206f, 0)
+	if err := os.Chtimes(filepath.Join(dir, "r.txt"), stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
 	fs := rawhttp.NewFS(dir)
 	fs.DisableByteRanges = true
 	srv := &rawhttp.Server{Handler: fs.Handler(), ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1}
 	fc := newFakeConn([]byte("GET /r.txt HTTP/1.1\r\nHost: localhost\r\nRange: bytes=2-5\r\nConnection: close\r\n\r\n"))
 	_ = srv.ServeConn(fc)
 	resp := fc.w.String()
-	if strings.Contains(resp, "206") || strings.Contains(resp, "Accept-Ranges:") {
+	if hasStatus(resp, "206") || strings.Contains(resp, "\r\nAccept-Ranges:") {
 		t.Fatalf("ranges disabled: %q", resp)
 	}
 	if !strings.Contains(resp, "0123456789") {
@@ -166,7 +182,7 @@ func TestFS_Range(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := fc.w.String()
-	if !strings.Contains(resp, "206") {
+	if !hasStatus(resp, "206") {
 		t.Fatalf("want 206: %q", resp)
 	}
 	if !strings.Contains(resp, "Content-Range: bytes 2-5/10") {

@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.1 - 2026-10-15
+
+### Fixed
+
+- `TestFS_DisableByteRanges` reads the status line. The weak ETag is the file mtime in hex, so a search of the whole response for `206` matched `W/"6ad1206f-a"` on the Go 1.26 runner. The server behavior is unchanged.
+
 ## v1.0.0 - 2026-10-15
 
 The public Go API is stable. A breaking change from here on needs a new major version and module path (`github.com/zatrano/rawhttp/v2`). The code is the same as v0.2.10; upgrading needs no source changes.

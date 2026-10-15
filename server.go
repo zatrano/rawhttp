@@ -322,11 +322,13 @@ func (s *Server) headerBufSize() int {
 
 func (s *Server) connReadBufSize() int {
 	limit := s.headerBufSize()
-	// A ceiling at or below the historical 8 KiB buffer keeps that size.
-	// A higher ceiling (framework uses 16 KiB) starts at 4 KiB and grows.
-	n := limit
-	if limit > defaultBufSize {
-		n = readBufInitial
+	// Every ceiling starts at 4 KiB and grows only while the header block
+	// does not fit, up to the ceiling. The default 8 KiB ceiling used to
+	// allocate 8 KiB on connect. A plaintext request never fills that, and
+	// fasthttp's default read buffer is 4 KiB.
+	n := readBufInitial
+	if limit > 0 && limit < n {
+		n = limit
 	}
 	if s.ReadBufferSize > 0 {
 		n = s.ReadBufferSize

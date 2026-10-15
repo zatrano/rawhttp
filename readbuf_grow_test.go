@@ -95,6 +95,39 @@ func noDeadlineServer(h Handler) *Server {
 	}
 }
 
+func TestDefaultReadBufferStartsAt4KiB(t *testing.T) {
+	var capSeen int
+	srv := noDeadlineServer(func(ctx *Ctx) {
+		capSeen = cap(ctx.cr.buf)
+		ctx.SetBodyString("ok")
+	})
+	req := "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+	fc := &scriptConn{parts: [][]byte{[]byte(req)}}
+	if err := srv.ServeConn(fc); err != nil && !strings.Contains(err.Error(), "EOF") {
+		t.Fatal(err)
+	}
+	if capSeen != readBufInitial {
+		t.Fatalf("cap=%d want %d", capSeen, readBufInitial)
+	}
+}
+
+func TestDefaultReadBufferGrowsTo8KiB(t *testing.T) {
+	payload := strings.Repeat("a", 5<<10)
+	req := "GET / HTTP/1.1\r\nHost: localhost\r\nX: " + payload + "\r\nConnection: close\r\n\r\n"
+	var capSeen int
+	srv := noDeadlineServer(func(ctx *Ctx) {
+		capSeen = cap(ctx.cr.buf)
+		ctx.SetBodyString("ok")
+	})
+	fc := &scriptConn{parts: [][]byte{[]byte(req)}}
+	if err := srv.ServeConn(fc); err != nil && !strings.Contains(err.Error(), "EOF") {
+		t.Fatal(err)
+	}
+	if capSeen != readBufStep8 {
+		t.Fatalf("cap=%d want %d", capSeen, readBufStep8)
+	}
+}
+
 func TestReadBufferStartsAt4KiB(t *testing.T) {
 	var capSeen int
 	srv := noDeadlineServer(func(ctx *Ctx) {

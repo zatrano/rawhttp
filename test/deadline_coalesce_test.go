@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -196,9 +197,7 @@ func TestActiveKeepAliveSurvivesThreeReadTimeouts(t *testing.T) {
 
 // A reader that does not drain the body is cut by WriteTimeout. The refresh
 // granule does not extend that deadline. net.Pipe blocks the response write
-// until the client reads it, which is the full-window case. This host's TCP
-// loopback accepts a 32 MiB write without backpressure, so the pipe is the
-// blocking reader.
+// until the client reads it.
 func TestSlowReaderClosesAtWriteTimeout(t *testing.T) {
 	const writeTO = 400 * time.Millisecond
 	granule := refreshGranule(writeTO)
@@ -242,6 +241,78 @@ func TestSlowReaderClosesAtWriteTimeout(t *testing.T) {
 	}
 	if readErr == nil || errors.Is(readErr, os.ErrDeadlineExceeded) || elapsed > bound+200*time.Millisecond {
 		t.Fatalf("slow reader still open after %s, bound %s: %v (serve %v)", elapsed, bound, readErr, serveErr)
+	}
+}
+
+// The same slow reader on TCP loopback. The accepted socket has a small send
+// buffer and the client has a small receive buffer, so a large body blocks
+// in Write until WriteTimeout on a stack that honors those buffers.
+//
+// Windows loopback does not. With SO_RCVBUF and SO_SNDBUF at 1024 and
+// SIO_LOOPBACK_FAST_PATH disabled, an 8 MiB Write to a peer that does not
+// read still returns in about 5 ms. WriteTimeout is not observable there.
+// The pipe test covers that case.
+func TestSlowReaderClosesAtWriteTimeoutTCP(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows loopback accepts a multi-megabyte write despite 2 KiB socket buffers")
+	}
+	const writeTO = 400 * time.Millisecond
+	granule := refreshGranule(writeTO)
+	body := bytes.Repeat([]byte("x"), 8<<20)
+	base, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln := smallSendListener{Listener: base}
+	srv := &rawhttp.Server{
+		ReadHeaderTimeout: time.Second,
+		ReadTimeout:       2 * time.Second,
+		WriteTimeout:      writeTO,
+		IdleTimeout:       2 * time.Second,
+		Handler:           func(ctx *rawhttp.Ctx) { ctx.SetBody(body) },
+	}
+	go srv.Serve(ln) //nolint:errcheck
+	defer ln.Close()
+	defer srv.Close()
+
+	dialer := net.Dialer{Control: smallRecvControl}
+	conn, err := dialer.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	tightenRead(conn)
+	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	buf := make([]byte, 256)
+	_ = conn.SetReadDeadline(t0.Add(time.Second))
+	n, err := conn.Read(buf)
+	if n == 0 && err != nil {
+		t.Fatal(err)
+	}
+	got := n
+	bound := writeTO + granule
+	// Stop reading so the small window stays full and the server write blocks.
+	if wait := bound - time.Since(t0); wait > 0 {
+		time.Sleep(wait)
+	}
+	stop := time.Now().Add(200 * time.Millisecond)
+	var readErr error
+	for {
+		_ = conn.SetReadDeadline(stop)
+		n, readErr = conn.Read(buf)
+		got += n
+		if readErr != nil {
+			break
+		}
+	}
+	elapsed := time.Since(t0)
+	// A closed connection still yields the bytes already in the 2 KiB window.
+	// A write that finished delivers the 8 MiB body and then stays open.
+	if got > 64<<10 || errors.Is(readErr, os.ErrDeadlineExceeded) || elapsed > bound+200*time.Millisecond {
+		t.Fatalf("slow TCP reader still open after %s, bound %s, read %d: %v (%s)", elapsed, bound, got, readErr, tcpBufferDetail(conn))
 	}
 }
 

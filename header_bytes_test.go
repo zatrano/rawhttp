@@ -2,6 +2,7 @@ package rawhttp
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -60,13 +61,13 @@ func TestSetHeaderBytesCopiesTheValue(t *testing.T) {
 
 func TestSetHeaderBytesRejectsCRLF(t *testing.T) {
 	ctx := &Ctx{}
-	if err := ctx.SetHeaderBytes("X-Request-Id", []byte("a\r\nb")); err != ErrHeaderInvalid {
+	if err := ctx.SetHeaderBytes("X-Request-Id", []byte("a\r\nb")); !errors.Is(err, ErrHeaderInvalid) {
 		t.Fatalf("err=%v", err)
 	}
 	if len(ctx.respHeaderBuf) != 0 {
 		t.Fatalf("buffer=%q", ctx.respHeaderBuf)
 	}
-	if err := ctx.SetHeader("X-Request-Id", "a\r\nb"); err != ErrHeaderInvalid {
+	if err := ctx.SetHeader("X-Request-Id", "a\r\nb"); !errors.Is(err, ErrHeaderInvalid) {
 		t.Fatalf("string err=%v", err)
 	}
 }

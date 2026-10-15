@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.10 - 2026-10-15
+
+### Documentation
+
+- The effective timeout of a coalesced deadline is `[d − granule, d]`, granule = min(d/8, 1s). A kept deadline is never later than `d`.
+
 ## Unreleased
 
 ### Added
@@ -19,7 +25,7 @@
 
 ### Changed
 
-- A still-valid read or write deadline is not refreshed. The granule is `min(d/8, 1s)`, where `d` is the timeout being armed. A kept deadline is at most one granule earlier than `now+d` and is never later. The wait between keep-alive requests is `IdleTimeout` (90s when unset). `ReadTimeout` covers a request body and the read once a request has started. An idle connection with `IdleTimeout` equal to `ReadTimeout` closes within `ReadTimeout` plus that granule. A connection that sends a request every `ReadTimeout/2` stays up. A reader that does not drain the body is cut by `WriteTimeout`.
+- A still-valid read or write deadline is not refreshed. The granule is `min(d/8, 1s)`. The effective timeout is `[d − granule, d]`. A kept deadline is earlier than `now+d` by at most one granule and is never later. The wait between keep-alive requests is `IdleTimeout` (90s when unset). `ReadTimeout` covers a request body and the read once a request has started. An idle connection with `IdleTimeout` equal to `ReadTimeout` closes within `ReadTimeout` plus that granule. A connection that sends a request every `ReadTimeout/2` stays up. A reader that does not drain the body is cut by `WriteTimeout`.
 
 ## v0.2.6 - 2026-10-12
 

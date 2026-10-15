@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `Ctx.SetHeaderBytes` appends a response header from a byte slice. The value is copied into the connection buffer. The wire bytes match `SetHeader` for the same key and value, including header order and the key's case. A value containing CTL or CR/LF is still `ErrHeaderInvalid`.
+
 ### Changed
 
 - The per-connection read buffer starts at 4 KiB, including the default 8 KiB header ceiling. While the header block is incomplete it grows to 8 KiB, then 16 KiB, then by doubling until `MaxHeaderBytes`. A ceiling below 4 KiB uses that ceiling. A finished header does not grow the buffer to hold the body. When the connection is idle and no bytes are waiting, a grown buffer goes back to a pool of at most 64 buffers per size and the next request starts at 4 KiB again. A header past `MaxHeaderBytes` is still 431.

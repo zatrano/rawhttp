@@ -767,6 +767,25 @@ func (c *Ctx) SetHeader(key, val string) error {
 // AddHeader is an alias for SetHeader (appends another header line).
 func (c *Ctx) AddHeader(key, val string) error { return c.SetHeader(key, val) }
 
+// SetHeaderBytes appends a response header from raw bytes. The value is
+// copied into the connection buffer, so the caller may reuse val.
+func (c *Ctx) SetHeaderBytes(key string, val []byte) error {
+	c.lockResp()
+	defer c.unlockResp()
+	if c.timedOut {
+		return nil
+	}
+	if !validHeaderNameStr(key) || containsCTLOrCRLFBytes(val) {
+		return ErrHeaderInvalid
+	}
+	c.respHeaderBuf = append(c.respHeaderBuf, key...)
+	c.respHeaderBuf = append(c.respHeaderBuf, ':', ' ')
+	c.respHeaderBuf = append(c.respHeaderBuf, val...)
+	c.respHeaderBuf = append(c.respHeaderBuf, '\r', '\n')
+	c.cacheOK = false
+	return nil
+}
+
 // DelHeader removes all response headers with the given name (case-insensitive)
 // from the pending response header buffer.
 func (c *Ctx) DelHeader(name string) {
@@ -850,6 +869,16 @@ func containsCRLF(s string) bool {
 func containsCTLOrCRLF(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
+		if c < 0x20 || c == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func containsCTLOrCRLFBytes(b []byte) bool {
+	for i := 0; i < len(b); i++ {
+		c := b[i]
 		if c < 0x20 || c == 0x7f {
 			return true
 		}

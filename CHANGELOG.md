@@ -1,21 +1,19 @@
 # Changelog
 
+## v1.0.0 - 2026-10-15
+
+The public Go API is stable. A breaking change from here on needs a new major version and module path (`github.com/zatrano/rawhttp/v2`). The code is the same as v0.2.10; upgrading needs no source changes.
+
+### Changed
+
+- Tests sit next to the package (`package rawhttp_test`) instead of a separate `test/` module. Run them with `go test ./...` from the repository root.
+- The fasthttp comparison benchmarks and the ServeConn rival gates (`TestGate_*`) are in a separate `bench/` module, so the root module still has no external dependencies. The alloc contracts (`TestAllocs_*`) stay in the root package.
+
 ## v0.2.10 - 2026-10-15
 
 ### Documentation
 
 - The effective timeout of a coalesced deadline is `[d − granule, d]`, granule = min(d/8, 1s). A kept deadline is never later than `d`.
-
-## Unreleased
-
-### Added
-
-- `Ctx.SetHeaderBytes` appends a response header from a byte slice. The value is copied into the connection buffer. The wire bytes match `SetHeader` for the same key and value, including header order and the key's case. A value containing CTL or CR/LF is still `ErrHeaderInvalid`.
-
-### Changed
-
-- The per-connection read buffer starts at 4 KiB, including the default 8 KiB header ceiling. While the header block is incomplete it grows to 8 KiB, then 16 KiB, then by doubling until `MaxHeaderBytes`. A ceiling below 4 KiB uses that ceiling. A finished header does not grow the buffer to hold the body. When the connection is idle and no bytes are waiting, a grown buffer goes back to a pool of at most 64 buffers per size and the next request starts at 4 KiB again. A header past `MaxHeaderBytes` is still 431.
-- A buffered `Content-Length` body is a view of the connection buffer during the handler. It is not copied. A response body that still points into that buffer is copied once, after the handler returns and before the buffer is compacted. A body the handler allocated itself is left untouched.
 
 ## v0.2.9 - 2026-10-15
 
@@ -26,6 +24,19 @@
 ### Changed
 
 - A still-valid read or write deadline is not refreshed. The granule is `min(d/8, 1s)`. The effective timeout is `[d − granule, d]`. A kept deadline is earlier than `now+d` by at most one granule and is never later. The wait between keep-alive requests is `IdleTimeout` (90s when unset). `ReadTimeout` covers a request body and the read once a request has started. An idle connection with `IdleTimeout` equal to `ReadTimeout` closes within `ReadTimeout` plus that granule. A connection that sends a request every `ReadTimeout/2` stays up. A reader that does not drain the body is cut by `WriteTimeout`.
+
+## v0.2.8 - 2026-10-15
+
+### Added
+
+- `Ctx.SetHeaderBytes` appends a response header from a byte slice. The value is copied into the connection buffer. The wire bytes match `SetHeader` for the same key and value, including header order and the key's case. A value containing CTL or CR/LF is still `ErrHeaderInvalid`.
+
+## v0.2.7 - 2026-10-15
+
+### Changed
+
+- The per-connection read buffer starts at 4 KiB, including the default 8 KiB header ceiling. While the header block is incomplete it grows to 8 KiB, then 16 KiB, then by doubling until `MaxHeaderBytes`. A ceiling below 4 KiB uses that ceiling. A finished header does not grow the buffer to hold the body. When the connection is idle and no bytes are waiting, a grown buffer goes back to a pool of at most 64 buffers per size and the next request starts at 4 KiB again. A header past `MaxHeaderBytes` is still 431.
+- A buffered `Content-Length` body is a view of the connection buffer during the handler. It is not copied. A response body that still points into that buffer is copied once, after the handler returns and before the buffer is compacted. A body the handler allocated itself is left untouched.
 
 ## v0.2.6 - 2026-10-12
 

@@ -794,6 +794,12 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	// timer is not reset on every request. A tighter phase (header cap under
 	// an idle cap, or a new write window) still replaces the timer.
 	var readArmed, writeArmed time.Time
+	// One closure per connection. reset clears the field; assigning this
+	// value again does not allocate. A new func value inside the loop did.
+	var onHijack func()
+	if cs != nil {
+		onHijack = func() { cs.hijacked.Store(true) }
+	}
 
 	for {
 		ctx.reset()
@@ -814,10 +820,7 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		ctx.trustedProxies = trustedProxies
 		ctx.conn = conn
 		ctx.cr = cr
-		ctx.markHijacked = nil
-		if cs != nil {
-			ctx.markHijacked = func() { cs.hijacked.Store(true) }
-		}
+		ctx.markHijacked = onHijack
 		ctx.connID = connID
 		ctx.connTime = connStart
 		reqNum++

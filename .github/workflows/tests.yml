@@ -22,6 +22,7 @@ jobs:
       - name: Unit + security corpus
         run: |
           go test -count=1 -timeout 5m -skip '^(TestGate_|TestAllocs_)' ./...
+          go test -count=1 -timeout 2m -v -run '^TestSlowReaderClosesAtWriteTimeoutTCP$' .
           go test -count=1 -timeout 3m -run '^TestSecurity' -v
 
   race:

@@ -183,6 +183,54 @@ func TestReadBufferTruncatedHeader(t *testing.T) {
 	}
 }
 
+func TestMaxHeaderBytesOneByteAroundCeiling(t *testing.T) {
+	const ceiling = 512
+	baseline := headerExchange(t, ceiling, 64, false)
+	if !strings.Contains(baseline, "200") || !strings.Contains(baseline, "\r\n\r\nok") {
+		t.Fatalf("baseline %q", baseline)
+	}
+	for _, delta := range []int{-1, 0} {
+		got := headerExchange(t, ceiling, ceiling+delta, false)
+		if got != baseline {
+			t.Fatalf("block %d\n got %q\nwant %q", ceiling+delta, got, baseline)
+		}
+	}
+	over := headerExchange(t, ceiling, ceiling+1, true)
+	if !strings.Contains(over, "431") || strings.Contains(over, "\r\n\r\nok") {
+		t.Fatalf("over ceiling: %q", over)
+	}
+}
+
+func headerExchange(t *testing.T, ceiling, block int, reject bool) string {
+	t.Helper()
+	srv := noDeadlineServer(func(ctx *Ctx) {
+		if reject {
+			t.Errorf("handler ran for a %d byte header block", block)
+		}
+		ctx.SetBodyString("ok")
+	})
+	srv.MaxHeaderBytes = ceiling
+	srv.NoDefaultDate = true
+	fc := &scriptConn{parts: [][]byte{[]byte(headerBlockRequest(block))}}
+	err := srv.ServeConn(fc)
+	if err != nil && !strings.Contains(err.Error(), "EOF") && !strings.Contains(fc.String(), "431") {
+		t.Fatal(err)
+	}
+	return fc.String()
+}
+
+func headerBlockRequest(total int) string {
+	// total is the on-wire header block, including the request line and the
+	// blank line. That is the byte count the read buffer ceiling enforces.
+	const lead = "GET / HTTP/1.1\r\nHost: localhost\r\nX-Pad: "
+	const post = "\r\n\r\n"
+	pad := total - len(lead) - len(post)
+	if pad < 1 {
+		panic("header block shorter than the fixed lines")
+	}
+	return lead + strings.Repeat("a", pad) + post
+}
+
 func TestReadBufferNearAndOver16KiB(t *testing.T) {
 	near := strings.Repeat("b", 14<<10)
 	req := "GET / HTTP/1.1\r\nHost: localhost\r\nX: " + near + "\r\nConnection: close\r\n\r\n"

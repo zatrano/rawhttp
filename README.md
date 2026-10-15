@@ -49,7 +49,7 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 go get github.com/zatrano/rawhttp@v0.2.6
 ```
 
-Tests live in a separate module (`test/`); run with: `cd test && go test ./...`
+Tests sit next to the code they cover; run with: `go test ./...`. Comparison benchmarks and rival gates that import fasthttp live in a separate module (`bench/`) so the root module stays dependency-free.
 
 ## Quick start
 
@@ -157,11 +157,11 @@ Notes: Hertz on Windows used `network library=standard`. Multibench uses a share
 | 4 | Hertz | 64 074 |
 | 5 | net/http | 34 217 |
 
-### ServeConn microbench (`test/`)
+### ServeConn microbench (`bench/`)
 
 ```bash
-cd test && go test -run=^$ -bench='Benchmark(RawHTTP|FastHTTP|NetHTTP)_Plaintext$' -benchmem -benchtime=2s -count=3
-cd test && go test -run=^$ -bench='Benchmark(RawHTTP|FastHTTP)_JSONPost$' -benchmem -benchtime=2s -count=3
+cd bench && go test -run=^$ -bench='Benchmark(RawHTTP|FastHTTP|NetHTTP)_Plaintext$' -benchmem -benchtime=2s -count=3
+cd bench && go test -run=^$ -bench='Benchmark(RawHTTP|FastHTTP)_JSONPost$' -benchmem -benchtime=2s -count=3
 ```
 
 Absolute ns/op below are **host-specific** (median of 5 runs, `-count=5`; re-measure on your machine).
@@ -204,7 +204,8 @@ ServeConn gates enforce “never slower” on trimmed rounds (≥1.00×) plus sc
 | plaintext hello | **0 allocs/op** |
 
 ```bash
-cd test && go test -run 'Gate|Allocs' -v
+cd bench && go test -run 'Gate' -v
+go test -run 'Allocs' -v
 ```
 
 ## vs net/http / fasthttp / Hertz / gnet
@@ -235,7 +236,7 @@ if err := c.Get("http://127.0.0.1:8080/", resp); err != nil {
 
 | Job | What |
 |-----|------|
-| unit + security | `test/` + security corpus |
+| unit + security | package tests + security corpus |
 | race | race detector; also `-tags rawhttp_poison` |
 | coverage / style / vuln / build | standard |
 | gate | ServeConn rival floors + allocs (`TestGate_*` / `TestAllocs_*`) |

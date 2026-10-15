@@ -58,11 +58,12 @@ linters:
         linters:
           - gosec
           - errcheck
-      - path: test/
-        linters:
-          - gosec
-          - errcheck
           - revive
+          - errorlint
+      - path: _test\.go
+        linters:
+          - govet
+        text: "shadow:"
     paths:
       - third_party$
       - builtin$

@@ -3,7 +3,7 @@
 //
 // Ranking (#1 + pairwise ≥1.00×) is informational by default (exit 0).
 // Optional -strict exits 2 on failure for local checks — not a CI gate.
-// CI regression contract is test/TestGate_* (ServeConn floors).
+// CI regression contract is bench/TestGate_* (ServeConn floors).
 //
 //	go run . -c 128 -d 5s
 //	go run . -c 64 -d 3s -strict          # local only: exit 2 if not #1
@@ -205,7 +205,7 @@ func main() {
 
 	if failed {
 		fmt.Println("INFO: ranking check failed (rawhttp not #1 or pairwise <1.00× on a scenario).")
-		fmt.Println("CI regression contract is test/TestGate_* (ServeConn); -strict is optional locally.")
+		fmt.Println("CI regression contract is bench/TestGate_* (ServeConn); -strict is optional locally.")
 		if *strict {
 			fmt.Println("PERFORMANCE CONTRACT BROKEN (-strict): rawhttp must be #1 vs fasthttp, net/http, Hertz, and gnet.")
 			os.Exit(2)

@@ -13,7 +13,7 @@ RawHTTP optimizes the HTTP/1.1 hot path by doing less work per request:
 
 ## Guidance (honest)
 
-- **CI ServeConn floors are authoritative** for regressions (`test/gate_test.go`).
+- **CI ServeConn floors are authoritative** for regressions (`bench/gate_test.go`).
 - README / tables below are **host-specific snapshots**; absolute ns and TCP RPS move with CPU load and GOMAXPROCS.
 - TCP multi-rival tables are snapshots; order can change between runs on the same host.
 
@@ -52,8 +52,8 @@ Hertz on Windows used `standard` network. Absolute RPS are host-specific. The sn
 | CPU | Intel Core i5-6200U @ 2.30GHz (2 cores / 4 threads) |
 | GOMAXPROCS | 4 |
 | Power plan | Dengeli |
-| Gate command | `cd test && go test -run '^(TestGate_|TestAllocs_)' -count=1 -v` |
-| Microbench command | `cd test && go test -run=^$ -bench='Benchmark(RawHTTP\|FastHTTP\|NetHTTP)_(Plaintext\|JSONPost)$' -benchmem -benchtime=2s -count=5` |
+| Gate command | `cd bench && go test -run '^TestGate_' -count=1 -v`; allocs: `go test -run '^TestAllocs_' -count=1 -v` |
+| Microbench command | `cd bench && go test -run=^$ -bench='Benchmark(RawHTTP\|FastHTTP\|NetHTTP)_(Plaintext\|JSONPost)$' -benchmem -benchtime=2s -count=5` |
 
 #### Gate trimmed medians (this host)
 
@@ -80,7 +80,7 @@ JSON vs fasthttp passed on the soft-retry. The first series had one round at 0.5
 ServeConn plaintext (this snapshot): **2.47×** vs fasthttp (1001 / 406), **35.5×** vs net/http (14413 / 406), **0 allocs**. These microbench ratios are one process in bench order. The gate ratios above are the regression measurement. CI floors are separate.
 ## CI ServeConn gate mechanics
 
-Implemented in `test/gate_test.go` (`assertFaster` / `assertFasterOnce`):
+Implemented in `bench/gate_test.go` (`assertFaster` / `assertFasterOnce`):
 
 1. Warmup, then **11** timed rounds (order of RawHTTP vs rival alternates).
 2. Each round ratio = `rival_ns / rawhttp_ns`. Soft per-round floor: ratio ≥ **0.85×** (a single noisy round may be &lt; 1.00×).
@@ -126,6 +126,7 @@ No per-round soft 0.85× check on the client gate; no run failed for “median n
 Optional `scripts/multibench -strict` is local-only (exits 2 if ranking/pairwise checks fail). CI does not use `-strict`; the regression contract is `TestGate_*` (ServeConn).
 
 ```bash
-cd test && go test -run 'Gate|Allocs' -count=1 -v
+cd bench && go test -run 'Gate' -count=1 -v
+go test -run 'Allocs' -count=1 -v
 cd scripts/multibench && go run . -c 64 -d 3s -rounds 5
 ```

@@ -23,7 +23,7 @@
 // ServeConn gates, and must stay ≥2.35× on plaintext / ≥1.65× on JSON
 // (enforced by test ServeConn comparison gates) with 0 allocs/op on the
 // hello path (TestAllocs_PlaintextHello). HostClient vs comparison-engine timing is
-// measured for information only (not a protected floor; see test/gate_test.go).
+// measured for information only (not a protected floor; see bench/gate_test.go).
 package rawhttp
 
 import (

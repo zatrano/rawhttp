@@ -10,7 +10,7 @@ go get github.com/zatrano/rawhttp@v0.2.6
 
 Module path: `github.com/zatrano/rawhttp`. Go 1.22+.
 
-Tests live in a separate module (`test/`): `cd test && go test ./...`.
+Tests sit next to the code they cover: `go test ./...`. Comparison benchmarks against fasthttp live in the separate `bench/` module.
 ## Minimal server
 
 ```go

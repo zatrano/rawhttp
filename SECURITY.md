@@ -32,7 +32,7 @@ These are repository checks, not third-party certification claims:
 
 1. **Timeouts and limits** — default read/write/idle timeouts, concurrency cap, header/body size caps
 2. **Parser refusal matrix** — CL/TE conflict, duplicate Host/CL, absolute-form, Upgrade-by-default 400 (see checklist below)
-3. **net/http differential tests** — `test/` corpus comparing accept/reject decisions where applicable
+3. **net/http differential tests** — `differential_test.go` corpus comparing accept/reject decisions where applicable
 4. **Fuzz targets** — nightly fuzz workflow for request parsing / upgrade surfaces
 5. **Race and poison CI jobs** — `-race` where available; `rawhttp_poison` build-tag jobs for slice lifetime
 
@@ -109,8 +109,8 @@ Status key: **Mitigated** (corpus + parser rule) · **Partial** (common forms re
 Re-run the living corpus after parser changes:
 
 ```bash
-cd test && go test -count=1 -run '^TestSecurity' -v
-cd test && go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
+go test -count=1 -run '^TestSecurity' -v
+go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
 ```
 
 ## Stricter than `net/http` (differential notes)
@@ -143,23 +143,23 @@ No corpus case in that comparison run showed RawHTTP **looser** than `net/http` 
 ## Testing
 
 ```bash
-cd test && go test -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
-cd test && go test -count=1 -run '^TestSecurity' -v
-cd test && go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
-cd test && go test -race -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
-cd test && go test -race -tags rawhttp_poison -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
-cd test && go test -run '^TestGate_' -count=1 -v
+go test -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
+go test -count=1 -run '^TestSecurity' -v
+go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
+go test -race -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
+go test -race -tags rawhttp_poison -count=1 -skip '^(TestGate_|TestAllocs_)' ./...
+cd bench && go test -run '^TestGate_' -count=1 -v
 go run ./scripts/plaintextbench -c 256 -d 10s
 gofmt -l .
-go vet ./... && (cd test && go vet ./...)
+go vet ./... && (cd bench && go vet ./...)
 staticcheck ./...
 govulncheck ./...
 ```
 
 GitHub Actions runs on every push/PR:
 
-1. **unit + security** — all `test/` tests except long comparison gates
-2. **race** — race detector (`test/`), plus a second job under `-tags rawhttp_poison`
+1. **unit + security** — all package tests except long comparison gates
+2. **race** — race detector, plus a second job under `-tags rawhttp_poison`
 3. **coverage** — `rawhttp` package ≥70% statement coverage
 4. **style** — gofmt, go vet, staticcheck, golangci-lint
 5. **vuln** — govulncheck

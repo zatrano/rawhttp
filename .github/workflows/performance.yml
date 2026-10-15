@@ -15,9 +15,11 @@ jobs:
         with:
           go-version: "1.25.x"
           cache: true
-      - name: ServeConn gates + allocs
-        working-directory: test
-        run: go test -run '^(TestGate_|TestAllocs_)' -count=1 -timeout 8m -v
+      - name: ServeConn gates
+        working-directory: bench
+        run: go test -run '^TestGate_' -count=1 -timeout 8m -v
+      - name: Alloc contracts
+        run: go test -run '^TestAllocs_' -count=1 -timeout 3m -v
       - name: Multi-rival TCP (informational)
         working-directory: scripts/multibench
         run: go run . -c 64 -d 3s -rounds 3 -scenarios plaintext,json

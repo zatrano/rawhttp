@@ -29,7 +29,7 @@ jobs:
           # G115/G602: known low-signal on safe conversions / fixed buffers.
           gosec -quiet -exclude-generated \
             -exclude=G115,G204,G304,G602 \
-            -exclude-dir=scripts -exclude-dir=test \
+            -exclude-dir=scripts -exclude-dir=bench \
             ./...
 
   govulncheck:
@@ -45,7 +45,7 @@ jobs:
       - run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ./...
-          (cd test && govulncheck ./...)
+          (cd bench && govulncheck ./...)
 
   semgrep:
     name: Semgrep

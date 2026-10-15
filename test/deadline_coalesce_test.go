@@ -2,14 +2,27 @@ package test_test
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"io"
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/zatrano/rawhttp"
 )
+
+// refreshGranule is deadlineSlack: min(d/8, 1s). A kept deadline is at most
+// this much earlier than now+d. It is never later.
+func refreshGranule(d time.Duration) time.Duration {
+	s := d / 8
+	if s > time.Second {
+		return time.Second
+	}
+	return s
+}
 
 // countDL counts deadline syscalls on one accepted connection.
 type countDL struct {
@@ -99,6 +112,156 @@ func TestKeepAliveCoalescesFreshDeadlines(t *testing.T) {
 	if got := dc.writes.Load(); got > 2 {
 		t.Fatalf("write deadlines armed %d times for %d buffered requests", got, n)
 	}
+}
+
+// An idle keep-alive connection closes on IdleTimeout. This test sets
+// IdleTimeout equal to ReadTimeout, so the close is inside ReadTimeout plus
+// the refresh granule. The wait between requests is IdleTimeout (default 90s
+// when IdleTimeout is 0), not ReadTimeout.
+func TestIdleKeepAliveClosesWithinReadTimeoutPlusGranule(t *testing.T) {
+	const readTO = 400 * time.Millisecond
+	granule := refreshGranule(readTO)
+	ln, srv := serveDeadline(t, &rawhttp.Server{
+		ReadHeaderTimeout: readTO,
+		ReadTimeout:       readTO,
+		WriteTimeout:      2 * time.Second,
+		IdleTimeout:       readTO,
+		Handler:           func(ctx *rawhttp.Ctx) { ctx.SetBodyString("ok") },
+	})
+	defer ln.Close()
+	defer srv.Close()
+
+	conn := dialDeadline(t, ln)
+	defer conn.Close()
+	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	br := bufio.NewReader(conn)
+	if err := discardResponse(br); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	bound := readTO + granule
+	_ = conn.SetReadDeadline(t0.Add(bound + 200*time.Millisecond))
+	_, err := conn.Read(make([]byte, 1))
+	elapsed := time.Since(t0)
+	if err == nil {
+		t.Fatal("idle connection delivered another byte")
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) || elapsed > bound+150*time.Millisecond {
+		t.Fatalf("idle connection still open after %s, bound %s", elapsed, bound)
+	}
+}
+
+// A connection that sends a request every ReadTimeout/2 stays up for 3× ReadTimeout.
+func TestActiveKeepAliveSurvivesThreeReadTimeouts(t *testing.T) {
+	const readTO = 400 * time.Millisecond
+	ln, srv := serveDeadline(t, &rawhttp.Server{
+		ReadHeaderTimeout: readTO,
+		ReadTimeout:       readTO,
+		WriteTimeout:      2 * time.Second,
+		IdleTimeout:       3 * readTO,
+		Handler:           func(ctx *rawhttp.Ctx) { ctx.SetBodyString("ok") },
+	})
+	defer ln.Close()
+	defer srv.Close()
+
+	conn := dialDeadline(t, ln)
+	defer conn.Close()
+	br := bufio.NewReader(conn)
+	req := []byte("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
+	start := time.Now()
+	until := start.Add(3 * readTO)
+	n := 0
+	for {
+		if _, err := conn.Write(req); err != nil {
+			t.Fatalf("request %d at %s: %v", n, time.Since(start), err)
+		}
+		if err := discardResponse(br); err != nil {
+			t.Fatalf("response %d at %s: %v", n, time.Since(start), err)
+		}
+		n++
+		if !time.Now().Before(until) {
+			break
+		}
+		next := start.Add(time.Duration(n) * readTO / 2)
+		if d := time.Until(next); d > 0 {
+			time.Sleep(d)
+		}
+	}
+	if time.Since(start) < 3*readTO {
+		t.Fatalf("finished at %s after %d requests", time.Since(start), n)
+	}
+}
+
+// A reader that does not drain the body is cut by WriteTimeout. The refresh
+// granule does not extend that deadline. net.Pipe blocks the response write
+// until the client reads it, which is the full-window case. This host's TCP
+// loopback accepts a 32 MiB write without backpressure, so the pipe is the
+// blocking reader.
+func TestSlowReaderClosesAtWriteTimeout(t *testing.T) {
+	const writeTO = 400 * time.Millisecond
+	granule := refreshGranule(writeTO)
+	body := bytes.Repeat([]byte("x"), 64<<10)
+	client, server := net.Pipe()
+	defer client.Close()
+	srv := &rawhttp.Server{
+		ReadHeaderTimeout: time.Second,
+		ReadTimeout:       2 * time.Second,
+		WriteTimeout:      writeTO,
+		IdleTimeout:       2 * time.Second,
+		Handler:           func(ctx *rawhttp.Ctx) { ctx.SetBody(body) },
+	}
+	done := make(chan error, 1)
+	go func() {
+		err := srv.ServeConn(server)
+		_ = server.Close()
+		done <- err
+	}()
+
+	if _, err := client.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	buf := make([]byte, 256)
+	_ = client.SetReadDeadline(t0.Add(time.Second))
+	if _, err := client.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	bound := writeTO + granule
+	if wait := bound - time.Since(t0); wait > 0 {
+		time.Sleep(wait)
+	}
+	_ = client.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	_, readErr := client.Read(buf)
+	elapsed := time.Since(t0)
+	var serveErr error
+	select {
+	case serveErr = <-done:
+	default:
+	}
+	if readErr == nil || errors.Is(readErr, os.ErrDeadlineExceeded) || elapsed > bound+200*time.Millisecond {
+		t.Fatalf("slow reader still open after %s, bound %s: %v (serve %v)", elapsed, bound, readErr, serveErr)
+	}
+}
+
+func serveDeadline(t *testing.T, srv *rawhttp.Server) (net.Listener, *rawhttp.Server) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve(ln) //nolint:errcheck
+	return ln, srv
+}
+
+func dialDeadline(t *testing.T, ln net.Listener) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", ln.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn
 }
 
 func discardResponse(br *bufio.Reader) error {

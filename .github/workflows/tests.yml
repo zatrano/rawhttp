@@ -39,6 +39,19 @@ jobs:
       - name: Race (rawhttp_poison)
         run: go test -race -tags rawhttp_poison -count=1 -timeout 10m -skip '^(TestGate_|TestAllocs_)' ./...
 
+  fs-linger-race:
+    name: fs and linger race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+          cache: true
+      - name: TestFS and linger cap, five times under race
+        run: go test -race -count=5 -timeout 25m -run '^(TestFS_|TestLingerDefaultCapBoundsFiveThousand$)' .
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest

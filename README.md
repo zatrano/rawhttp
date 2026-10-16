@@ -17,7 +17,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v1.0.0)
+[![Version](https://img.shields.io/github/v/tag/zatrano/rawhttp?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/rawhttp/releases/tag/v1.0.1)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/rawhttp?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/rawhttp/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -31,7 +31,7 @@ Independent HTTP/1.1 engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v1.0.0 (stable API, GA for application embedding).** Breaking API changes need a new major version. Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
+**Status: v1.0.1 (stable API, GA for application embedding).** Breaking API changes need a new major version. Suitable for production application servers (e.g. ZATRANO V3). Not positioned as a reverse proxy. Read [SECURITY.md](SECURITY.md) before public exposure.
 
 ```text
 Your app / framework
@@ -46,7 +46,7 @@ RawHTTP owns listen, connections, HTTP/1.1 parse/write, `Ctx`, limits, and the k
 ## Install
 
 ```bash
-go get github.com/zatrano/rawhttp@v1.0.0
+go get github.com/zatrano/rawhttp@v1.0.1
 ```
 
 Tests sit next to the code they cover; run with: `go test ./...`. Comparison benchmarks and rival gates that import fasthttp live in a separate module (`bench/`) so the root module stays dependency-free.
@@ -104,6 +104,27 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 | [Examples](docs/examples/) | Hello, JSON, middleware, upload |
 
 ## Benchmarks
+
+### Linux TCP, rawhttp / fasthttp (classification)
+
+Run [38796674394](https://github.com/zatrano/framework/actions/runs/38796674394), commit `ae14757`, 20 rounds, shared 4 vCPU runner. The server is pinned to CPU 0 with `GOMAXPROCS=1`. The pair is rawhttp against fasthttp on plaintext. The ratio is rawhttp/fasthttp. Each cell is the median of the three run summaries. A harness `fiber` on this pair means fasthttp won. The 1.05 gate is `hedef` only when the stable class is `ustun`, the ratio is at least 1.05, p99 and CPU are under 1, and the RSS ratio is at most 1.10. Absolute req/s from this runner is not the class.
+
+| Conns | Stable class | Gate | ratio | ci | p99 | cpu | rss |
+|---:|---|---|---:|---|---:|---:|---:|
+| 64 | ustun | rps | 1.016 | 1.014–1.019 | 0.985 | 0.966 | 0.977 |
+| 256 | ustun | rps | 1.028 | 1.024–1.038 | 0.997 | 0.954 | 0.922 |
+| 1024 | ustun | hedef | 1.128 | 1.077–1.146 | 0.862 | 0.883 | 0.911 |
+| 4096 | ustun | hedef | 1.093 | 1.086–1.104 | 0.917 | 0.911 | 0.816 |
+
+64 and 256 are stable `ustun` and short of 1.05, so the gate stays `rps`. One of the three runs at 64 and at 256 was `esik-yok` because p99 was above 1. 1024 is stable `hedef`: two runs cleared 1.05 (1.128 and 1.131) and the third was 1.049. 4096 is stable `ustun` and `hedef`. None of the four cells is a stable fasthttp win.
+
+The ServeConn benches and the `TestGate_*` floors live in this repository, in `bench/`. They compare one connection in-process and do not replace the table above.
+
+```bash
+cd bench && go test -run 'Gate|PublishedLinux' -v
+```
+
+### Windows host snapshot (not the class)
 
 Measured **2026-10-12** on Windows/amd64, CPU **i5-6200U @ 2.30GHz** (2 cores / 4 threads), `GOMAXPROCS=4`, power plan **Dengeli**. TCP multibench used Go **1.25.13** because Hertz's sonic build does not compile on Go 1.26. ServeConn gates and microbenches used Go **1.26.9**. Absolute ns/RPS are **host-specific**. CI ServeConn floors are the regression contract (see [docs/performance.md](docs/performance.md)).
 

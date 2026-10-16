@@ -15,10 +15,10 @@ func TestPublishedLinuxPair(t *testing.T) {
 	}
 	text := string(raw)
 	for _, row := range []string{
-		"| 64 | ustun | rps | 1.016 |",
-		"| 256 | ustun | rps | 1.028 |",
-		"| 1024 | ustun | hedef | 1.128 |",
-		"| 4096 | ustun | hedef | 1.093 |",
+		"| 64 | 1.016 | 1.014–1.019 | 0.985 | 0.966 | 0.977 | ahead |",
+		"| 256 | 1.028 | 1.024–1.038 | 0.997 | 0.954 | 0.922 | ahead |",
+		"| 1024 | 1.128 | 1.077–1.146 | 0.862 | 0.883 | 0.911 | ahead |",
+		"| 4096 | 1.093 | 1.086–1.104 | 0.917 | 0.911 | 0.816 | ahead |",
 	} {
 		if !strings.Contains(text, row) {
 			t.Fatalf("README is missing the rawhttp/fasthttp row %s", row)

@@ -22,6 +22,10 @@ func readChunkedBody(cr *connReader, ctx *Ctx, maxSize, maxTrailers, maxChunks i
 		}
 		if size == 0 {
 			nTrail := 0
+			trailBytes := 0
+			if maxTrailers <= 0 {
+				maxTrailers = defaultMaxHeaders
+			}
 			for {
 				t, err := cr.readLine()
 				if err != nil {
@@ -29,6 +33,10 @@ func readChunkedBody(cr *connReader, ctx *Ctx, maxSize, maxTrailers, maxChunks i
 				}
 				if len(t) == 0 {
 					break
+				}
+				trailBytes += len(t) + 2
+				if trailBytes > maxTrailerBytes {
+					return ErrBadRequest
 				}
 				if t[0] == ' ' || t[0] == '\t' {
 					return ErrBadRequest
@@ -72,7 +80,7 @@ func readChunkedBody(cr *connReader, ctx *Ctx, maxSize, maxTrailers, maxChunks i
 		if nChunks > maxChunks {
 			return ErrBadRequest
 		}
-		if len(buf)+size > maxSize {
+		if chunkWouldExceed(len(buf), size, maxSize) {
 			return ErrBodyTooLarge
 		}
 		need := size
@@ -152,9 +160,6 @@ func parseHexSize(line []byte) (int, bool) {
 	}
 	hexPart := line[:i]
 	rest := line[i:]
-	for len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
-		rest = rest[1:]
-	}
 	if len(rest) > 0 {
 		if rest[0] != ';' {
 			return 0, false
@@ -199,4 +204,16 @@ func consumeCRLF(cr *connReader) error {
 		return errBadChunk
 	}
 	return nil
+}
+
+// chunkWouldExceed reports whether adding size bytes to have would pass max.
+// The addition is not performed, so a huge parsed chunk size cannot wrap.
+func chunkWouldExceed(have, size, max int) bool {
+	if size < 0 || max < 0 {
+		return true
+	}
+	if size > max {
+		return true
+	}
+	return have > max-size
 }

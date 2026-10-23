@@ -3,6 +3,7 @@ package rawhttp_test
 import (
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +50,61 @@ func TestSlowHeaderHitsReadHeaderTimeout(t *testing.T) {
 	_, _ = io.Copy(io.Discard, conn)
 	if called {
 		t.Fatal("handler must not run when headers drip past ReadHeaderTimeout")
+	}
+}
+
+func TestMinBodyRateClosesSlowBody(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	called := false
+	srv := &rawhttp.Server{
+		ReadHeaderTimeout:     5 * time.Second,
+		ReadTimeout:           10 * time.Second,
+		WriteTimeout:          5 * time.Second,
+		IdleTimeout:           5 * time.Second,
+		MinBodyBytesPerSecond: 1024,
+		Handler:               func(ctx *rawhttp.Ctx) { called = true; _ = ctx.Body() },
+	}
+	go srv.Serve(ln) //nolint:errcheck
+	defer srv.Close()
+
+	conn, err := net.DialTimeout("tcp", ln.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	gotCh := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 256)
+		_ = conn.SetReadDeadline(time.Now().Add(8 * time.Second))
+		n, _ := conn.Read(buf)
+		gotCh <- string(buf[:n])
+	}()
+	hdr := "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 32\r\n\r\n"
+	if _, err := io.WriteString(conn, hdr); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 32; i++ {
+		if _, err := conn.Write([]byte("a")); err != nil {
+			break
+		}
+		time.Sleep(80 * time.Millisecond)
+	}
+	got := ""
+	select {
+	case got = <-gotCh:
+	case <-time.After(8 * time.Second):
+	}
+	if called {
+		t.Fatal("handler must not run when the body is slower than MinBodyBytesPerSecond")
+	}
+	if !strings.Contains(got, "408") {
+		t.Fatalf("want 408, got %q", got)
 	}
 }
 

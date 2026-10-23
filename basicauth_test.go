@@ -96,12 +96,30 @@ func TestClientIPTrustedProxies(t *testing.T) {
 		},
 		ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1,
 	}
+	// The rightmost untrusted hop is the client; 203.0.113.9 was written by
+	// whoever connected to 10.0.0.1 and is not trusted.
 	fc := newFakeConn([]byte(
 		"GET / HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 203.0.113.9, 10.0.0.1\r\nConnection: close\r\n\r\n",
 	))
 	_ = srv.ServeConn(fc)
+	if got != "10.0.0.1" {
+		t.Fatalf("trusted peer ClientIP=%q want 10.0.0.1", got)
+	}
+
+	srvChain := &rawhttp.Server{
+		TrustedProxies: []string{"127.0.0.0/8", "10.0.0.0/8"},
+		Handler: func(ctx *rawhttp.Ctx) {
+			got = ctx.ClientIP()
+			ctx.SetBody([]byte(got))
+		},
+		ReadTimeout: -1, WriteTimeout: -1, IdleTimeout: -1,
+	}
+	fc = newFakeConn([]byte(
+		"GET / HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 203.0.113.9, 10.0.0.1\r\nConnection: close\r\n\r\n",
+	))
+	_ = srvChain.ServeConn(fc)
 	if got != "203.0.113.9" {
-		t.Fatalf("trusted peer ClientIP=%q want 203.0.113.9", got)
+		t.Fatalf("trusted chain ClientIP=%q want 203.0.113.9", got)
 	}
 
 	srv2 := &rawhttp.Server{

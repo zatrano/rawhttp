@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("GET /1 HTTP/1.1\r\nHost: localhost\r\n\r\nPOST /2 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nConnection: close\r\n\r\nab")

@@ -39,6 +39,34 @@ jobs:
       - name: Race (rawhttp_poison)
         run: go test -race -tags rawhttp_poison -count=1 -timeout 10m -skip '^(TestGate_|TestAllocs_)' ./...
 
+  checkptr:
+    name: race + checkptr
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+          cache: true
+      - name: Race with pointer checks
+        run: go test -race -gcflags=all=-d=checkptr -count=1 -timeout 15m -skip '^(TestGate_|TestAllocs_)' ./...
+
+  smuggling-differential:
+    name: smuggling + differential
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+          cache: true
+      - name: Smuggling corpus, differential against net/http, leak tests
+        run: |
+          go test -race -count=1 -timeout 10m -v ./tests/smuggling ./differential
+          go test -race -count=1 -timeout 5m -run '^(TestNoGoroutineLeak|TestState|TestDefaultLimit|TestUnsafeOnlyInAllowlistedFiles|TestFuzzCorpusCoversSmugglingCases)' -v .
+
   fs-linger-race:
     name: fs and linger race
     runs-on: ubuntu-latest
@@ -100,3 +128,8 @@ jobs:
           go test -timeout 3m -run=^$ -fuzz=FuzzHeaders -fuzztime=8s
           go test -timeout 3m -run=^$ -fuzz=FuzzChunkedBody -fuzztime=8s
           go test -timeout 3m -run=^$ -fuzz=FuzzDifferentialReadRequest -fuzztime=8s
+          go test -timeout 3m -run=^$ -fuzz=FuzzDifferentialNetHTTP -fuzztime=8s
+          go test -timeout 3m -run=^$ -fuzz=FuzzClientResponse -fuzztime=8s
+          go test -timeout 3m -run=^$ -fuzz=FuzzUpgradePredicate -fuzztime=8s
+          go test -timeout 3m -run=^$ -fuzz=FuzzDifferentialFraming -fuzztime=15s ./differential
+          go test -timeout 3m -run=^$ -fuzz=FuzzMultipart -fuzztime=8s

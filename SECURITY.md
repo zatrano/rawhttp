@@ -8,7 +8,41 @@
 | 0.2.x   | superseded by 1.0.0 (same code as 0.2.10) |
 | 0.1.x   | superseded |
 
-Report issues via GitHub. Do not open public issues for unfixed zero-days without coordinated disclosure.
+## Reporting a vulnerability
+
+Do not open a public issue, pull request or discussion for a vulnerability.
+
+Report privately, by either channel:
+
+- GitHub private vulnerability reporting: **Security → Report a vulnerability**
+  on github.com/zatrano/rawhttp
+- Email Serhan KARAKOÇ at [serhankarakoc@zatrano.com](mailto:serhankarakoc@zatrano.com)
+
+Include the rawhttp version or commit, the Go version, the raw bytes that
+trigger the problem (a `printf` line or a file), what you expected, what
+happened, and the impact you see (smuggling, crash, memory growth, data from
+another request).
+
+### Process
+
+| Step | Target |
+|------|--------|
+| Acknowledge the report | 3 business days |
+| Reproduce and assess severity | 7 days |
+| Fix on a private branch, with a regression test and a smuggling-corpus or fuzz-corpus case | 30 days for high or critical, 90 days otherwise |
+| Release a patch version and publish a GitHub security advisory (CVE requested through GitHub) | with the fix |
+| Public details | at release, or 90 days after the report, whichever comes first, unless we agree another date with the reporter |
+
+The reporter is credited in the advisory unless they ask not to be. We will
+keep the reporter informed at each step. Good-faith research that avoids
+privacy violations, data destruction and service disruption, and that is
+reported through the channels above, will not be pursued.
+
+Only the latest 1.x release receives security fixes.
+
+Security properties and their tests: [docs/SECURITY-GUARANTEES.md](docs/SECURITY-GUARANTEES.md).
+Defaults: [docs/SECURITY-BASELINE.md](docs/SECURITY-BASELINE.md).
+Current test and review status: [docs/ENGINE-STATUS.md](docs/ENGINE-STATUS.md).
 
 ## Status (GA readiness)
 
@@ -73,6 +107,13 @@ These are repository checks, not third-party certification claims:
 32. Optional `HeaderReceived` per-request body/timeout overrides; `SecureHeadersMiddleware` (CSP / Permissions-Policy / COOP)
 33. `AllowedHosts` matches FQDN trailing dots; `BasicAuthMiddleware` (constant-time) / `RequestIDMiddleware`
 34. `Server.ReadBufferSize` independent of `MaxHeaderBytes` ceiling; FS `RejectSymlinks` / `HideDotFiles`
+35. `Content-Length` and `Transfer-Encoding` are engine-only: `SetHeader` / `SetHeaderBytes` return `ErrHeaderInvalid`; `Connection: close` from a handler closes the connection, other `Connection` values are ignored
+36. `Transfer-Encoding` on an HTTP/1.0 request is rejected (RFC 9112 §6.1)
+37. Canned error responses compute `Content-Length` from their body
+38. `SetCookie` rejects `;` in value, path and domain
+39. A recovered handler panic drops any stream body and closes the connection
+40. `ClientIP` reads `X-Forwarded-For` from the right, skipping trusted hops
+41. `ServerTLSConfig`: TLS 1.2 minimum, ECDHE + AEAD suites on TLS 1.2
 
 ## Smuggling / desync checklist
 
@@ -100,7 +141,7 @@ Status key: **Mitigated** (corpus + parser rule) · **Partial** (common forms re
 | 17 | `Connection: upgrade` / `Upgrade` | Mitigated (default) | **400** before handler when `AllowUpgrade` is false; with `AllowUpgrade`, only a standards-shaped WS handshake reaches the handler |
 | 18 | TRACE / CONNECT | Mitigated | Reject |
 | 19 | Path `..` / `%2e` / `%00` / `#` / `\` / CTL | Mitigated | Reject literal and encoded dots |
-| 20 | Response splitting via `SetHeader` | Mitigated | CR/LF/CTL blocked |
+| 20 | Response splitting via `SetHeader` | Mitigated | CR/LF/CTL blocked; framing headers engine-only; `;` blocked in cookies |
 | 21 | Header bomb (count / size) | Mitigated | `MaxHeaders` / `MaxHeaderBytes` → 431 |
 | 22 | Pipelined request desync | Partial | Keep-alive pipelining OK by default; `DisablePipelining` closes on leftover |
 | 23 | HTTP/2 downgrade / H2c preface | Out of scope | HTTP/1.1 only |
@@ -111,6 +152,7 @@ Re-run the living corpus after parser changes:
 
 ```bash
 go test -count=1 -run '^TestSecurity' -v
+go test -count=1 -v ./tests/smuggling ./differential
 go test -fuzz=FuzzServeConn -fuzztime=30s -run=^$
 ```
 
@@ -168,6 +210,9 @@ GitHub Actions runs on every push/PR:
 7. **gate** — ServeConn rival floors + never-slower trimmed rounds + 0-alloc hello (see `docs/performance.md`)
 8. **fuzz** — short ServeConn / request-line / headers / chunked / differential ReadRequest runs
 9. **nightly fuzz** — longer fuzz via schedule / `workflow_dispatch`
+10. **race + checkptr** — `-race -gcflags=all=-d=checkptr` over every package
+11. **smuggling + differential** — `tests/smuggling`, `differential`, state machine, limit and leak tests
+12. **weekly fuzz** — one hour per fuzz target every Sunday
 `TestSecurityAttackCorpus` attempts request smuggling, Host/path abuse,
 chunk/trailer attacks, response splitting, and header bombs — RawHTTP must reject them
 without invoking the handler.

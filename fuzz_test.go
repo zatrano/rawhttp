@@ -2,6 +2,7 @@ package rawhttp_test
 
 import (
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -224,5 +225,44 @@ func FuzzClientResponse(f *testing.F) {
 		defer rawhttp.ReleaseResponse(resp)
 		req.RequestURI = "/"
 		_ = hc.Do(req, resp) // must not panic
+	})
+}
+
+// FuzzMultipart feeds multipart bodies through ServeConn and MultipartForm.
+func FuzzMultipart(f *testing.F) {
+	boundary := "----FuzzBoundary"
+	for _, body := range []string{
+		"--" + boundary + "\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\nv\r\n--" + boundary + "--\r\n",
+		"--" + boundary + "\r\nContent-Disposition: form-data; name=\"f\"; filename=\"x.txt\"\r\nContent-Type: text/plain\r\n\r\nhi\r\n--" + boundary + "--\r\n",
+		"--" + boundary + "\r\n\r\n--" + boundary + "--\r\n",
+		"",
+		"--" + boundary,
+	} {
+		f.Add([]byte(body))
+	}
+	f.Fuzz(func(t *testing.T, body []byte) {
+		if len(body) > 16<<10 {
+			t.Skip()
+		}
+		var b strings.Builder
+		b.WriteString("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=")
+		b.WriteString(boundary)
+		b.WriteString("\r\nContent-Length: ")
+		b.WriteString(strconv.Itoa(len(body)))
+		b.WriteString("\r\nConnection: close\r\n\r\n")
+		req := append([]byte(b.String()), body...)
+		srv := &rawhttp.Server{
+			Handler: func(ctx *rawhttp.Ctx) {
+				_, _ = ctx.MultipartForm(0)
+				ctx.SetBody([]byte("ok"))
+			},
+			ReadTimeout:        100 * time.Millisecond,
+			WriteTimeout:       100 * time.Millisecond,
+			IdleTimeout:        100 * time.Millisecond,
+			MaxRequestBodySize: 16 << 10,
+			MaxMultipartParts:  8,
+			MaxMultipartFiles:  4,
+		}
+		_ = srv.ServeConn(newFakeConn(req))
 	})
 }

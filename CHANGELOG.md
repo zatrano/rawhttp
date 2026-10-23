@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- The canned 413 and 417 responses declared a `Content-Length` one byte longer than their body. A client or proxy that trusted the header waited for, or consumed, one byte of the next response. Every canned response now computes its length from its body.
+- `SetHeader` and `SetHeaderBytes` reject `Content-Length` and `Transfer-Encoding` with `ErrHeaderInvalid`; the engine writes both. A handler value could previously produce a second, conflicting framing header.
+- `SetHeader("Connection", ...)` no longer writes the header. A value with the `close` token closes the connection after the response; other values are ignored.
+- `SetCookie` rejects `;` in `Value`, `Path` and `Domain`, which could add attributes such as `Domain=` to the cookie.
+- `Transfer-Encoding` on an HTTP/1.0 request is rejected with 400 (RFC 9112 §6.1).
+- After a recovered handler panic, a stream body set before the panic is dropped and the connection is closed instead of reused.
+- `ClientIP` reads every `X-Forwarded-For` line from the right and skips trusted proxies. It used the leftmost hop, which the client controls.
+- `ListenAndServeTLS` uses the new `ServerTLSConfig`: TLS 1.2 minimum, ECDHE with AES-GCM or ChaCha20-Poly1305 on TLS 1.2.
+- A zero-value `Server` now caps keep-alive at 1_000_000 requests per connection, 64 consecutive pipelined requests, and a 64 byte/s body read rate after the first second of body I/O (408). Negative field values turn each cap off.
+- A chunk size of `7fffffffffffffff` no longer wraps the body-size check.
+- `Ctx.reset` drops the keep-alive encoded-body cache so two `SetBody` calls that share a backing array cannot replay the previous response.
+
+### Added
+
+- `ServerTLSConfig(certs ...tls.Certificate) *tls.Config`.
+- `tests/smuggling`: a request-smuggling corpus run whole and one byte per read.
+- `differential`: request sequences compared with `net/http` (test files only; no new dependency), with seeded mutations and a fuzz target.
+- State machine, default limit, goroutine leak, TLS and `unsafe` allowlist tests; a persistent fuzz corpus in `testdata/fuzz`.
+- CI: a `-race -gcflags=all=-d=checkptr` job, a smuggling and differential job, more short fuzz targets, and a weekly one-hour fuzz run per target.
+- `docs/SECURITY-GUARANTEES.md`, `docs/SECURITY-BASELINE.md`, `docs/ENGINE-STATUS.md`, `docs/DEPLOYMENT-HARDENING.md`, and a disclosure process in `SECURITY.md`.
+
 ## v1.0.1 - 2026-10-15
 
 ### Fixed

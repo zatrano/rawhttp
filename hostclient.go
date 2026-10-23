@@ -1229,7 +1229,7 @@ func readClientChunked(cr *connReader, dst []byte, maxBody, maxChunks int) ([]by
 		if nChunks > maxChunks {
 			return nil, ErrBadRequest
 		}
-		if len(buf)+size > maxBody {
+		if chunkWouldExceed(len(buf), size, maxBody) {
 			return nil, ErrBodyTooLarge
 		}
 		need := size

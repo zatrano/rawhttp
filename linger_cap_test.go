@@ -14,6 +14,9 @@ import (
 )
 
 func TestLingerDefaultCapBoundsFiveThousand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("5000 concurrent linger sockets is the Linux CI job (fs-linger-race)")
+	}
 	const (
 		total = 5000
 		capN  = 1024

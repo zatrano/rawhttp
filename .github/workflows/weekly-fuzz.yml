@@ -1,0 +1,46 @@
+name: Weekly fuzz
+
+on:
+  schedule:
+    - cron: "0 2 * * 0" # 02:00 UTC every Sunday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-weekly:
+    name: fuzz ${{ matrix.target.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: FuzzServeConn, pkg: . }
+          - { name: FuzzRequestLine, pkg: . }
+          - { name: FuzzHeaders, pkg: . }
+          - { name: FuzzChunkedBody, pkg: . }
+          - { name: FuzzClientResponse, pkg: . }
+          - { name: FuzzUpgradePredicate, pkg: . }
+          - { name: FuzzDifferentialReadRequest, pkg: . }
+          - { name: FuzzDifferentialNetHTTP, pkg: . }
+          - { name: FuzzDifferentialFraming, pkg: ./differential }
+          - { name: FuzzMultipart, pkg: . }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+          cache: true
+      - name: Fuzz for one hour
+        run: go test -timeout 75m -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=60m ${{ matrix.target.pkg }}
+      - name: Keep failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashers-${{ matrix.target.name }}
+          path: |
+            testdata/fuzz/${{ matrix.target.name }}
+            differential/testdata/fuzz/${{ matrix.target.name }}

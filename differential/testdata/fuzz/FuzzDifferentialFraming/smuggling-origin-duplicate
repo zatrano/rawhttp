@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("GET / HTTP/1.1\r\nHost: localhost\r\nOrigin: https://evil.example\r\nOrigin: https://app.example\r\n\r\n")

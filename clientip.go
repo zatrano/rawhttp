@@ -6,9 +6,16 @@ import (
 )
 
 // ClientIP returns the client address for access control / logging.
-// When Server.TrustedProxies is empty, this is RemoteIP().
-// When set and the peer is trusted, the left-most X-Forwarded-For hop
-// (or X-Real-IP) is used; otherwise RemoteIP().
+// When Server.TrustedProxies is empty, or the peer is not a trusted proxy,
+// this is RemoteIP().
+//
+// When the peer is trusted, the X-Forwarded-For hops (all header lines, in
+// order) are read from the right, skipping hops that are themselves trusted
+// proxies. The first untrusted hop is the client. Hops to its left were
+// written by the client and are not used. A hop that is not an IP address
+// stops the walk and RemoteIP() is returned. When every hop is trusted, the
+// leftmost one is returned. Without X-Forwarded-For, a valid X-Real-IP set by
+// the trusted peer is used.
 func (c *Ctx) ClientIP() string {
 	peer := c.RemoteIP()
 	if len(c.trustedProxies) == 0 {
@@ -17,19 +24,32 @@ func (c *Ctx) ClientIP() string {
 	if !ipTrusted(peer, c.trustedProxies) {
 		return peer
 	}
-	if xff := c.Header("X-Forwarded-For"); len(xff) > 0 {
-		parts := strings.Split(string(xff), ",")
-		if len(parts) > 0 {
-			ip := strings.TrimSpace(parts[0])
-			if ip != "" {
-				return stripIPPort(ip)
+	var hops []string
+	c.VisitHeader(func(k, v []byte) {
+		if len(k) == len("X-Forwarded-For") && equalFoldStr(k, "X-Forwarded-For") {
+			for _, part := range strings.Split(string(v), ",") {
+				hops = append(hops, strings.TrimSpace(part))
 			}
 		}
+	})
+	if len(hops) > 0 {
+		leftmost := ""
+		for i := len(hops) - 1; i >= 0; i-- {
+			ip := stripIPPort(hops[i])
+			if net.ParseIP(ip) == nil {
+				return peer
+			}
+			if !ipTrusted(ip, c.trustedProxies) {
+				return ip
+			}
+			leftmost = ip
+		}
+		return leftmost
 	}
 	if xri := c.Header("X-Real-IP"); len(xri) > 0 {
-		ip := strings.TrimSpace(string(xri))
-		if ip != "" {
-			return stripIPPort(ip)
+		ip := stripIPPort(strings.TrimSpace(string(xri)))
+		if net.ParseIP(ip) != nil {
+			return ip
 		}
 	}
 	return peer

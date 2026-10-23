@@ -27,9 +27,6 @@ Thumbs.db
 *.pem
 *.key
 
-# Go fuzz cache
-**/testdata/fuzz/
-
 # Cursor IDE (local)
 .cursor/
 

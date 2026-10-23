@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("GET /1 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\nGET /2 HTTP/1.1\r\nHost: localhost\r\n\r\n")
+bool(false)

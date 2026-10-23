@@ -116,7 +116,7 @@ func (rs *requestStream) readChunked(p []byte) (int, error) {
 			rs.err = ErrBadRequest
 			return 0, ErrBadRequest
 		}
-		if rs.totalRead+size > rs.maxSize {
+		if chunkWouldExceed(rs.totalRead, size, rs.maxSize) {
 			rs.err = ErrBodyTooLarge
 			return 0, ErrBodyTooLarge
 		}
@@ -173,6 +173,7 @@ func (rs *requestStream) readTrailers() error {
 	if maxTrailers <= 0 {
 		maxTrailers = 100
 	}
+	trailBytes := 0
 	for {
 		t, err := rs.cr.readLine()
 		if err != nil {
@@ -180,6 +181,10 @@ func (rs *requestStream) readTrailers() error {
 		}
 		if len(t) == 0 {
 			return nil
+		}
+		trailBytes += len(t) + 2
+		if trailBytes > maxTrailerBytes {
+			return ErrBadRequest
 		}
 		if t[0] == ' ' || t[0] == '\t' {
 			return ErrBadRequest

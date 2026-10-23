@@ -16,6 +16,10 @@ const maxChunkExtLen = 256
 const maxChunksPerBody = 16 << 10 // 16384 non-zero chunks
 const maxHeaderNameLen = 256
 
+// maxTrailerBytes caps the trailer section of a chunked body. Each line is
+// already bounded by the read buffer; this bounds their sum.
+const maxTrailerBytes = 8 << 10
+
 func parseRequestLineOpts(cr *connReader, ctx *Ctx, allowDotDot bool) error {
 	line, err := cr.readLine()
 	if err != nil {
@@ -246,6 +250,11 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 			if ctx.chunked && ctx.clSet {
 				return errChunkedConflict
 			}
+			// RFC 9112 §6.1: Transfer-Encoding in an HTTP/1.0 request is faulty
+			// framing; an HTTP/1.0 intermediary would read the body by length.
+			if ctx.chunked && ctx.httpMinor == 0 {
+				return errChunkedConflict
+			}
 			// GET/HEAD must not carry a request body.
 			if noBodyMethod(ctx.Method) && (ctx.chunked || (ctx.clSet && ctx.contentLength > 0)) {
 				return ErrBadRequest
@@ -310,6 +319,11 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 				ctx.acceptEncoding = val
 				known = true
 			} else if len(key) == 13 && isAuthorization(key) {
+				// Singleton fields: two lines leave readers to pick
+				// different ones (first in net/http, last here).
+				if ctx.authorization != nil {
+					return ErrBadRequest
+				}
 				ctx.authorization = val
 				known = true
 			} else if len(key) == 6 && isAccept(key) {
@@ -318,6 +332,9 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 			}
 		case 'o':
 			if len(key) == 6 && isOrigin(key) {
+				if ctx.origin != nil {
+					return ErrBadRequest
+				}
 				ctx.origin = val
 				known = true
 			}
@@ -345,6 +362,9 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 				ctx.closeHeader = ctx.closeHeader || closeH
 				known = true
 			} else if len(key) == 12 && isContentType(key) {
+				if ctx.reqContentType != nil {
+					return ErrBadRequest
+				}
 				ctx.reqContentType = val
 				known = true
 			} else if len(key) == 6 && isCookie(key) {
@@ -369,7 +389,9 @@ func parseHeaders(cr *connReader, ctx *Ctx, maxHeaders, maxHdrBytes int, allowUp
 			}
 		case 'e':
 			if len(key) == 6 && isExpect(key) {
-				if hasToken(val, v100Continue) {
+				// The only expectation defined is 100-continue; a list that
+				// adds an unknown one fails (RFC 9110 §10.1.1).
+				if equalFoldBytes(val, v100Continue) && !ctx.expectContinue {
 					ctx.expectContinue = true
 					known = true
 				} else {
@@ -515,20 +537,65 @@ func isHeaderNameToken(key []byte) bool {
 	return true
 }
 
+// validHostValue accepts uri-host [ ":" port ] (RFC 9110 §7.2): a reg-name or
+// IPv4 address of letters, digits, '-', '.', '_' and '~', or a bracketed IPv6
+// literal, then an optional port of at most five digits. Anything else (a
+// second colon, a non-numeric port, userinfo, percent-encoding, sub-delims,
+// non-ASCII) is rejected, so the host the server checks against AllowedHosts
+// is the host every later reader sees.
 func validHostValue(v []byte) bool {
 	if len(v) == 0 || len(v) > 255 {
 		return false
 	}
-	for _, c := range v {
-		// ASCII-only Host: reject high bytes (proxy desync / IDN footguns).
-		if c >= 0x80 {
+	i := 0
+	if v[0] == '[' {
+		end := -1
+		for j := 1; j < len(v); j++ {
+			c := v[j]
+			if c == ']' {
+				end = j
+				break
+			}
+			if !(isHexDigit(c) || c == ':' || c == '.') {
+				return false
+			}
+		}
+		if end < 2 {
 			return false
 		}
-		if c <= 0x20 || c == 0x7f || c == '@' || c == '/' || c == '\\' || c == ',' {
+		i = end + 1
+	} else {
+		for i < len(v) && v[i] != ':' {
+			c := v[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '.' || c == '_' || c == '~') {
+				return false
+			}
+			i++
+		}
+		if i == 0 {
+			return false
+		}
+	}
+	if i == len(v) {
+		return true
+	}
+	if v[i] != ':' {
+		return false
+	}
+	port := v[i+1:]
+	if len(port) > 5 {
+		return false
+	}
+	for _, c := range port {
+		if c < '0' || c > '9' {
 			return false
 		}
 	}
 	return true
+}
+
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 func validHeaderValue(v []byte) bool {
@@ -660,17 +727,49 @@ func readRequestBody(cr *connReader, ctx *Ctx, maxSize, maxTrailers, maxChunks i
 		return ErrBodyTooLarge
 	}
 	buf := ctx.reqBody
-	if cap(buf) < n {
-		buf = make([]byte, n)
-	} else {
+	if cap(buf) >= n || n <= bodyUpfrontAlloc {
+		if cap(buf) < n {
+			buf = make([]byte, n)
+		}
 		buf = buf[:n]
+		if err := cr.readFull(buf); err != nil {
+			return err
+		}
+		ctx.reqBody = buf
+		return nil
 	}
-	if err := cr.readFull(buf); err != nil {
-		return err
+	// A declared length is only a claim. Grow with the bytes that arrive, so
+	// a client that sends headers and stalls holds at most bodyUpfrontAlloc.
+	buf = buf[:0]
+	for len(buf) < n {
+		if len(buf) == cap(buf) {
+			next := 2 * cap(buf)
+			if next < bodyUpfrontAlloc {
+				next = bodyUpfrontAlloc
+			}
+			if next > n {
+				next = n
+			}
+			grown := make([]byte, len(buf), next)
+			copy(grown, buf)
+			buf = grown
+		}
+		end := cap(buf)
+		if end > n {
+			end = n
+		}
+		if err := cr.readFull(buf[len(buf):end]); err != nil {
+			return err
+		}
+		buf = buf[:end]
 	}
 	ctx.reqBody = buf
 	return nil
 }
+
+// bodyUpfrontAlloc is the largest Content-Length body allocated before any of
+// it has arrived.
+const bodyUpfrontAlloc = 64 << 10
 
 // prepareRequestBodyStream attaches a streaming body reader instead of buffering.
 // Content-Length over maxSize is rejected immediately (413).

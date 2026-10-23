@@ -85,6 +85,17 @@ type Server struct {
 	// pipelining is unchanged. Useful when fronting untrusted clients.
 	DisablePipelining bool
 
+	// MaxPipelineDepth is how many consecutive pipelined requests one
+	// connection may serve. Zero uses 64. Negative means unlimited.
+	// DisablePipelining is stricter and still wins.
+	MaxPipelineDepth int
+
+	// MinBodyBytesPerSecond is the minimum average body read rate after the
+	// first second of body I/O. Zero uses 64. Negative disables. A slower
+	// client is answered with 408 and the connection is closed. ReadTimeout
+	// still caps the whole request.
+	MinBodyBytesPerSecond int
+
 	// DisablePanicRecovery skips the per-request recover() wrapper. Default false
 	// (safe). Enable only for trusted handlers / microbenchmarks.
 	DisablePanicRecovery bool
@@ -136,7 +147,7 @@ type Server struct {
 	TCPKeepalivePeriod time.Duration
 
 	// MaxRequestsPerConn limits keep-alive requests on one connection.
-	// Zero means unlimited.
+	// Zero uses 1_000_000. Negative means unlimited.
 	MaxRequestsPerConn int
 
 	// MaxConnDuration limits how long a keep-alive connection may live
@@ -359,6 +370,36 @@ func (s *Server) maxChunks() int {
 	return maxChunksPerBody
 }
 
+func (s *Server) maxRequestsPerConn() int {
+	if s.MaxRequestsPerConn < 0 {
+		return 0
+	}
+	if s.MaxRequestsPerConn == 0 {
+		return defaultMaxRequestsPerConn
+	}
+	return s.MaxRequestsPerConn
+}
+
+func (s *Server) maxPipeline() int {
+	if s.MaxPipelineDepth < 0 {
+		return 0
+	}
+	if s.MaxPipelineDepth == 0 {
+		return defaultMaxPipelineDepth
+	}
+	return s.MaxPipelineDepth
+}
+
+func (s *Server) minBodyRate() int {
+	if s.MinBodyBytesPerSecond < 0 {
+		return 0
+	}
+	if s.MinBodyBytesPerSecond == 0 {
+		return defaultMinBodyBytesPerSec
+	}
+	return s.MinBodyBytesPerSecond
+}
+
 func (s *Server) logger() *log.Logger {
 	if s.ErrorLog != nil {
 		return s.ErrorLog
@@ -446,15 +487,30 @@ func (s *Server) ListenAndServeTLS(addr, certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-	cfg := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-	}
 	ln, err := net.Listen(s.listenNetwork(), addr)
 	if err != nil {
 		return err
 	}
-	return s.Serve(tls.NewListener(ln, cfg))
+	return s.Serve(tls.NewListener(ln, ServerTLSConfig(cert)))
+}
+
+// ServerTLSConfig is the TLS configuration ListenAndServeTLS uses: TLS 1.2 or
+// newer, and for TLS 1.2 only ECDHE key exchange with AEAD ciphers (no RSA key
+// exchange, CBC, 3DES, or RC4). TLS 1.3 suites are fixed by crypto/tls. Use it
+// as the base for a listener you build yourself.
+func ServerTLSConfig(certs ...tls.Certificate) *tls.Config {
+	return &tls.Config{
+		Certificates: certs,
+		MinVersion:   tls.VersionTLS12,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+		},
+	}
 }
 
 func (s *Server) listenNetwork() string {
@@ -568,30 +624,33 @@ func (s *Server) acquireConcurrency() bool {
 }
 
 func hostAllowed(host []byte, allowed []string) bool {
-	h := string(host)
-	// Strip optional port for comparison.
-	if i := strings.LastIndexByte(h, ':'); i > 0 {
-		// Ignore IPv6 bracket form for simple host:port.
-		if h[0] != '[' {
-			h = h[:i]
-		}
-	}
 	// Trailing DNS dot is insignificant for allowlist matching.
-	h = strings.TrimSuffix(h, ".")
+	h := strings.TrimSuffix(hostWithoutPort(string(host)), ".")
 	for _, a := range allowed {
 		if a == "" {
 			continue
 		}
-		aa := a
-		if j := strings.LastIndexByte(aa, ':'); j > 0 && aa[0] != '[' {
-			aa = aa[:j]
-		}
-		aa = strings.TrimSuffix(aa, ".")
+		aa := strings.TrimSuffix(hostWithoutPort(a), ".")
 		if strings.EqualFold(h, aa) {
 			return true
 		}
 	}
 	return false
+}
+
+// hostWithoutPort strips ":port" from host or "[v6]:port". The request Host
+// has passed validHostValue, so it holds at most one colon outside brackets.
+func hostWithoutPort(h string) string {
+	if strings.HasPrefix(h, "[") {
+		if i := strings.IndexByte(h, ']'); i > 0 {
+			return h[:i+1]
+		}
+		return h
+	}
+	if i := strings.IndexByte(h, ':'); i >= 0 {
+		return h[:i]
+	}
+	return h
 }
 
 func methodAllowed(method []byte, allowed []string) bool {
@@ -758,8 +817,11 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 	maxChk := s.maxChunks()
 	disableKA := s.DisableKeepalive
 	skipDL := s.noDeadlines()
-	maxReq := s.MaxRequestsPerConn
+	maxReq := s.maxRequestsPerConn()
+	maxPipe := s.maxPipeline()
+	minRate := s.minBodyRate()
 	maxDur := s.MaxConnDuration
+	var pipeline int
 	connStart := time.Now()
 	connID := nextConnID()
 	var reqNum uint64
@@ -988,6 +1050,13 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 
 		needBody := (ctx.clSet && ctx.contentLength > 0) || ctx.chunked
 		bodyPinned := false // Content-Length body still aliases the read buffer
+		cr.minBodyRate = 0
+		cr.bodyBytes = 0
+		cr.bodyReadStart = time.Time{}
+		if needBody {
+			cr.minBodyRate = minRate
+			cr.bodyReadStart = time.Now()
+		}
 		// A known length over the cap is rejected before 100 Continue.
 		// Chunked bodies have no length yet: send 100, then enforce the cap while reading.
 		if needBody && !ctx.chunked && ctx.clSet && ctx.contentLength > reqMaxBody {
@@ -1029,7 +1098,11 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			// buffer — keep header slices pinned, skip ownership copies.
 			if !streamReqBody && !ctx.chunked && ctx.clSet && ctx.contentLength > 0 {
 				n := ctx.contentLength
-				if body, ok := cr.takeBufferedBody(n); ok {
+				body, err := cr.takeBufferedBody(n)
+				if errors.Is(err, errBodyTooSlow) {
+					return s.clientError(conn, err)
+				}
+				if err == nil {
 					// The body stays a view of the read buffer for the handler.
 					// A response that still points at that view is copied once,
 					// after the handler and before the buffer is compacted.
@@ -1135,7 +1208,10 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 			return nil
 		}
 		if streamReqBody && ctx.reqStream != nil {
-			unread := closeUnreadStream && !ctx.reqStream.done
+			// After a panic or a framing error in the body, the rest of the
+			// body is not read: the response is written and the connection
+			// closes. Draining would wait on a client that may never send.
+			unread := (closeUnreadStream || ctx.forceClose || ctx.reqStream.err != nil) && !ctx.reqStream.done
 			if unread {
 				releaseRequestStream(ctx.reqStream)
 				ctx.reqStream = nil
@@ -1172,8 +1248,17 @@ func (s *Server) serveLoop(conn net.Conn, cs *connState) error {
 		if maxDur > 0 && time.Since(connStart) >= maxDur {
 			closeConn = true
 		}
+		cr.minBodyRate = 0
 		// Opt-in: refuse HTTP pipelining — close if another request is already buffered.
 		if s.DisablePipelining && cr.w > cr.off {
+			closeConn = true
+		}
+		if cr.w > cr.off {
+			pipeline++
+		} else {
+			pipeline = 0
+		}
+		if maxPipe > 0 && pipeline >= maxPipe {
 			closeConn = true
 		}
 		if err := writeResponse(conn, ctx, closeConn); err != nil {
@@ -1215,6 +1300,9 @@ func (s *Server) clientErrorCtx(ctx *Ctx, conn net.Conn, err error) error {
 		wrote = true
 	case errors.Is(err, ErrURITooLong):
 		writeURITooLong(conn)
+		wrote = true
+	case errors.Is(err, errBodyTooSlow):
+		writeRequestTimeout(conn)
 		wrote = true
 	case errors.Is(err, ErrMisdirectedRequest):
 		writeMisdirectedRequest(conn)
@@ -1265,6 +1353,12 @@ func (s *Server) callHandler(handler Handler, ctx *Ctx) {
 			ctx.respChunked = false
 			ctx.respHeaderBuf = ctx.respHeaderBuf[:0]
 			ctx.userSetCT = false
+			// A stream body set before the panic would be written under the
+			// 500 status. The handler may also have left a streamed request
+			// body half read, so the connection is not reused.
+			ctx.streamBody = nil
+			ctx.streamSize = 0
+			ctx.forceClose = true
 		}
 	}()
 	handler(ctx)

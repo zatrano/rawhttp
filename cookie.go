@@ -3,6 +3,7 @@ package rawhttp
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -109,6 +110,11 @@ func (c *Ctx) SetCookie(cookie *Cookie) error {
 		return ErrHeaderInvalid
 	}
 	if containsCTLOrCRLF(cookie.Value) || containsCTLOrCRLF(cookie.Path) || containsCTLOrCRLF(cookie.Domain) {
+		return ErrHeaderInvalid
+	}
+	// A ';' in any of these would start a new attribute (for example
+	// "; Domain=evil.example") inside the same Set-Cookie line.
+	if strings.IndexByte(cookie.Value, ';') >= 0 || strings.IndexByte(cookie.Path, ';') >= 0 || strings.IndexByte(cookie.Domain, ';') >= 0 {
 		return ErrHeaderInvalid
 	}
 	c.respHeaderBuf = append(c.respHeaderBuf, "Set-Cookie: "...)

@@ -38,18 +38,21 @@ const (
 	defaultBufSize = 8192
 	// readBufInitial is the per-connection read buffer. It grows only while
 	// the header block does not fit, and only up to the header ceiling.
-	readBufInitial        = 4 << 10
-	readBufStep8          = 8 << 10
-	readBufStep16         = 16 << 10
-	grownReadPoolMax      = 64
-	defaultMaxBodySize    = 4 << 20 // 4 MiB
-	defaultMaxHeaderBytes = 8192
-	defaultMaxHeaders     = 100
-	maxMethodLen          = 32
-	defaultReadTimeout    = 30 * time.Second
-	defaultWriteTimeout   = 30 * time.Second
-	defaultIdleTimeout    = 90 * time.Second
-	defaultConcurrency    = 256 * 1024
+	readBufInitial            = 4 << 10
+	readBufStep8              = 8 << 10
+	readBufStep16             = 16 << 10
+	grownReadPoolMax          = 64
+	defaultMaxBodySize        = 4 << 20 // 4 MiB
+	defaultMaxHeaderBytes     = 8192
+	defaultMaxHeaders         = 100
+	maxMethodLen              = 32
+	defaultReadTimeout        = 30 * time.Second
+	defaultWriteTimeout       = 30 * time.Second
+	defaultIdleTimeout        = 90 * time.Second
+	defaultConcurrency        = 256 * 1024
+	defaultMaxRequestsPerConn = 1_000_000
+	defaultMaxPipelineDepth   = 64
+	defaultMinBodyBytesPerSec = 64
 )
 
 var (
@@ -68,6 +71,7 @@ var (
 	errExpectationFailed    = errors.New("rawhttp: expectation failed")
 	errRequestRejected      = errors.New("rawhttp: request rejected")
 	errStreamUnread         = errors.New("rawhttp: streamed body was not consumed")
+	errBodyTooSlow          = errors.New("rawhttp: request body slower than MinBodyBytesPerSecond")
 	ErrHeaderInvalid        = errors.New("rawhttp: response header contains CR/LF")
 	ErrHeaderTooLarge       = errors.New("rawhttp: response headers too large")
 	ErrServerClosed         = errors.New("rawhttp: server closed")

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type connReader struct {
@@ -15,6 +16,33 @@ type connReader struct {
 	off      int
 	pooled   bool
 	unpinned bool // release() copied header slices; consumed bytes may be discarded
+
+	minBodyRate   int
+	bodyBytes     int
+	bodyReadStart time.Time
+}
+
+func (cr *connReader) accountBody(n int) error {
+	if cr.minBodyRate <= 0 {
+		return nil
+	}
+	if n > 0 {
+		if cr.bodyReadStart.IsZero() {
+			cr.bodyReadStart = time.Now()
+		}
+		cr.bodyBytes += n
+	}
+	if cr.bodyReadStart.IsZero() {
+		return nil
+	}
+	elapsed := time.Since(cr.bodyReadStart)
+	if elapsed < time.Second {
+		return nil
+	}
+	if int64(cr.bodyBytes) < int64(cr.minBodyRate)*int64(elapsed/time.Second) {
+		return errBodyTooSlow
+	}
+	return nil
 }
 
 func newConnReader(conn net.Conn, size int) *connReader {
@@ -140,7 +168,7 @@ func (cr *connReader) fill() error {
 	if n == 0 {
 		return io.ErrNoProgress
 	}
-	return nil
+	return cr.accountBody(n)
 }
 
 func (cr *connReader) readLine() ([]byte, error) {
@@ -165,20 +193,19 @@ func (cr *connReader) readLine() ([]byte, error) {
 // takeBufferedBody returns a zero-copy slice of the next n bytes when they
 // already sit (or can be filled) in the read buffer without compacting over
 // the pinned header region. On success the parse cursor advances by n.
-// Returns ok=false when the body cannot fit beside the pinned headers (caller
-// must copy headers, release the pin, then readFull).
-func (cr *connReader) takeBufferedBody(n int) (body []byte, ok bool) {
+// A fill error (including a too-slow body) is returned to the caller.
+func (cr *connReader) takeBufferedBody(n int) (body []byte, err error) {
 	if n <= 0 {
-		return nil, true
+		return nil, nil
 	}
 	for cr.w-cr.off < n {
 		if err := cr.fill(); err != nil {
-			return nil, false
+			return nil, err
 		}
 	}
 	body = cr.buf[cr.off : cr.off+n]
 	cr.off += n
-	return body, true
+	return body, nil
 }
 
 // readFull copies exactly n bytes from the parse cursor into dst, reading
@@ -202,6 +229,9 @@ func (cr *connReader) readFull(dst []byte) error {
 		// Buffer empty of unparsed data: read straight into dst.
 		nn, err := cr.conn.Read(dst[filled:])
 		filled += nn
+		if aerr := cr.accountBody(nn); aerr != nil {
+			return aerr
+		}
 		if err != nil {
 			if filled == n && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
 				return nil

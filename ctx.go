@@ -174,6 +174,11 @@ func (c *Ctx) reset() {
 	c.cacheOK = true
 	c.cachedHasCT = false
 	c.cachedCT = c.cachedCT[:0]
+	c.cachedCL = 0
+	c.cachedCode = 0
+	c.cachedDateOff = 0
+	c.cachedBodyPtr = nil
+	c.outBuf = c.outBuf[:0]
 	c.noDefaultDate = false
 	c.noDefaultCT = false
 	c.serverName = ""
@@ -747,6 +752,11 @@ func (c *Ctx) SetLastModified(t time.Time) error {
 
 // SetHeader appends a response header. Returns ErrHeaderInvalid if key is not
 // a valid token or key/val contains CTL/CR/LF (response-splitting protection).
+//
+// Content-Length, Transfer-Encoding, and Connection are written by the engine
+// from the body and the connection state. SetHeader rejects the first two with
+// ErrHeaderInvalid. "Connection: close" is SetConnectionClose; any other
+// Connection value is ignored.
 func (c *Ctx) SetHeader(key, val string) error {
 	c.lockResp()
 	defer c.unlockResp()
@@ -755,6 +765,9 @@ func (c *Ctx) SetHeader(key, val string) error {
 	}
 	if !validHeaderNameStr(key) || containsCTLOrCRLF(val) {
 		return ErrHeaderInvalid
+	}
+	if handled, err := c.framingHeader(key, val); handled {
+		return err
 	}
 	c.respHeaderBuf = append(c.respHeaderBuf, key...)
 	c.respHeaderBuf = append(c.respHeaderBuf, ':', ' ')
@@ -778,12 +791,63 @@ func (c *Ctx) SetHeaderBytes(key string, val []byte) error {
 	if !validHeaderNameStr(key) || containsCTLOrCRLFBytes(val) {
 		return ErrHeaderInvalid
 	}
+	if isFramingHeaderName(key) {
+		_, err := c.framingHeader(key, string(val))
+		return err
+	}
 	c.respHeaderBuf = append(c.respHeaderBuf, key...)
 	c.respHeaderBuf = append(c.respHeaderBuf, ':', ' ')
 	c.respHeaderBuf = append(c.respHeaderBuf, val...)
 	c.respHeaderBuf = append(c.respHeaderBuf, '\r', '\n')
 	c.cacheOK = false
 	return nil
+}
+
+func isFramingHeaderName(key string) bool {
+	switch len(key) {
+	case 10:
+		return equalFoldString(key, "Connection")
+	case 14:
+		return equalFoldString(key, "Content-Length")
+	case 17:
+		return equalFoldString(key, "Transfer-Encoding")
+	}
+	return false
+}
+
+// framingHeader handles a header the engine owns. handled is false for every
+// other name. The caller holds the response lock.
+func (c *Ctx) framingHeader(key, val string) (handled bool, err error) {
+	if !isFramingHeaderName(key) {
+		return false, nil
+	}
+	if len(key) == 10 {
+		if hasToken([]byte(val), vClose) {
+			c.forceClose = true
+			c.cacheOK = false
+		}
+		return true, nil
+	}
+	return true, ErrHeaderInvalid
+}
+
+func equalFoldString(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		x, y := a[i], b[i]
+		if x >= 'A' && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if y >= 'A' && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 // DelHeader removes all response headers with the given name (case-insensitive)

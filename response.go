@@ -36,21 +36,34 @@ func releaseStreamWriter(bw *bufio.Writer) {
 var (
 	status200      = []byte("HTTP/1.1 200 OK\r\n")
 	status200Plain = []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n")
-	status400      = []byte("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 11\r\n\r\nBad Request")
-	status413      = []byte("HTTP/1.1 413 Request Entity Too Large\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 17\r\n\r\nEntity Too Large")
-	status414      = []byte("HTTP/1.1 414 URI Too Long\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 12\r\n\r\nURI Too Long")
-	status417      = []byte("HTTP/1.1 417 Expectation Failed\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 19\r\n\r\nExpectation Failed")
-	status421      = []byte("HTTP/1.1 421 Misdirected Request\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 19\r\n\r\nMisdirected Request")
-	status429      = []byte("HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 17\r\n\r\nToo Many Requests")
-	status431      = []byte("HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 31\r\n\r\nRequest Header Fields Too Large")
-	hdrCTPlain     = []byte("Content-Type: text/plain\r\n")
-	hdrCL          = []byte("Content-Length: ")
-	hdrTEChunk     = []byte("Transfer-Encoding: chunked\r\n")
-	hdrConnKA      = []byte("Connection: keep-alive\r\n")
-	hdrConnCl      = []byte("Connection: close\r\n")
-	chunkEnd       = []byte("0\r\n\r\n")
-	continue100    = []byte("HTTP/1.1 100 Continue\r\n\r\n")
+	// Canned error responses. The Content-Length is computed from the body so
+	// it cannot drift from it; a wrong length desynchronizes the client.
+	status400   = cannedResponse("400 Bad Request", "Bad Request")
+	status413   = cannedResponse("413 Request Entity Too Large", "Entity Too Large")
+	status414   = cannedResponse("414 URI Too Long", "URI Too Long")
+	status417   = cannedResponse("417 Expectation Failed", "Expectation Failed")
+	status421   = cannedResponse("421 Misdirected Request", "Misdirected Request")
+	status429   = cannedResponse("429 Too Many Requests", "Too Many Requests")
+	status431   = cannedResponse("431 Request Header Fields Too Large", "Request Header Fields Too Large")
+	status408   = cannedResponse("408 Request Timeout", "Request Timeout")
+	hdrCTPlain  = []byte("Content-Type: text/plain\r\n")
+	hdrCL       = []byte("Content-Length: ")
+	hdrTEChunk  = []byte("Transfer-Encoding: chunked\r\n")
+	hdrConnKA   = []byte("Connection: keep-alive\r\n")
+	hdrConnCl   = []byte("Connection: close\r\n")
+	chunkEnd    = []byte("0\r\n\r\n")
+	continue100 = []byte("HTTP/1.1 100 Continue\r\n\r\n")
 )
+
+func cannedResponse(status, body string) []byte {
+	b := make([]byte, 0, 96+len(status)+len(body))
+	b = append(b, "HTTP/1.1 "...)
+	b = append(b, status...)
+	b = append(b, "\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: "...)
+	b = strconv.AppendInt(b, int64(len(body)), 10)
+	b = append(b, "\r\n\r\n"...)
+	return append(b, body...)
+}
 
 func writeBadRequest(conn net.Conn) {
 	_, _ = conn.Write(status400)
@@ -78,6 +91,10 @@ func writeMisdirectedRequest(conn net.Conn) {
 
 func writeHeaderTooLarge(conn net.Conn) {
 	_, _ = conn.Write(status431)
+}
+
+func writeRequestTimeout(conn net.Conn) {
+	_, _ = conn.Write(status408)
 }
 
 func writeFixedStatus(conn net.Conn, code, retryAfter int) {
@@ -412,7 +429,7 @@ func writeStreamResponse(conn net.Conn, ctx *Ctx, closeConn bool) error {
 	}()
 	if chunked {
 		for {
-			n, err := ctx.streamBody.Read(buf)
+			n, err := readStream(ctx.streamBody, buf)
 			if n > 0 {
 				ctx.outBuf = ctx.outBuf[:0]
 				ctx.outBuf = appendChunk(ctx.outBuf, buf[:n])
@@ -436,7 +453,7 @@ func writeStreamResponse(conn net.Conn, ctx *Ctx, closeConn bool) error {
 		if chunk > remaining {
 			chunk = remaining
 		}
-		n, err := io.ReadFull(ctx.streamBody, buf[:chunk])
+		n, err := readStreamFull(ctx.streamBody, buf[:chunk])
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return werr

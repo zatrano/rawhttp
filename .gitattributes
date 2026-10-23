@@ -1,0 +1,2 @@
+testdata/fuzz/** -text
+**/testdata/fuzz/** -text
